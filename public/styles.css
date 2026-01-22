@@ -160,6 +160,22 @@ input[type="text"]::placeholder {
   transform: none;
 }
 
+.btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+}
+
+.btn-secondary:hover {
+  color: white;
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-2px);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
+}
+
 /* Lobby Panel */
 .lobby-header {
   display: flex;

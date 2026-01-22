@@ -86,6 +86,14 @@ io.on('connection', (socket) => {
 
   // Handle player join
   socket.on('joinGame', (playerName) => {
+    // Prevent duplicate joins from the same socket (e.g., leaving and rejoining from the lobby UI)
+    const existing = gameState.players.find(p => p.id === socket.id);
+    if (existing) {
+      existing.name = playerName || existing.name;
+      io.emit('gameState', serializeGameState({ includeTrails: false }));
+      return;
+    }
+
     if (gameState.players.length >= 10) {
       socket.emit('error', 'Game is full (max 10 players)');
       return;
@@ -110,6 +118,25 @@ io.on('connection', (socket) => {
     gameState.players.push(player);
     io.emit('gameState', serializeGameState({ includeTrails: false }));
     console.log(`${playerName} joined (${gameState.players.length}/10)`);
+  });
+
+  // Handle player leave (without disconnecting socket)
+  socket.on('leaveGame', () => {
+    const index = gameState.players.findIndex(p => p.id === socket.id);
+    if (index === -1) return;
+
+    const player = gameState.players[index];
+    console.log(`${player.name} left the game`);
+    gameState.players.splice(index, 1);
+    gameState.readyPlayers.delete(socket.id);
+
+    // Reset game if not enough players
+    if (gameState.players.length < 2 && gameState.state !== 'lobby') {
+      resetToLobby();
+      return;
+    }
+
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
   });
 
   // Handle player ready

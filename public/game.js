@@ -11,6 +11,7 @@ const lobbyPanel = document.getElementById('lobbyPanel');
 const playerNameInput = document.getElementById('playerNameInput');
 const joinButton = document.getElementById('joinButton');
 const readyButton = document.getElementById('readyButton');
+const exitButton = document.getElementById('exitButton');
 const playerList = document.getElementById('playerList');
 const playerCount = document.getElementById('playerCount');
 const canvas = document.getElementById('gameCanvas');
@@ -195,6 +196,17 @@ readyButton.addEventListener('click', () => {
   readyButton.disabled = true;
   readyButton.textContent = 'Waiting for others...';
   tryStartBgm();
+});
+
+// Exit lobby
+exitButton.addEventListener('click', () => {
+  socket.emit('leaveGame');
+
+  joinForm.style.display = 'block';
+  lobbyPanel.style.display = 'none';
+  readyButton.disabled = false;
+  readyButton.textContent = 'Ready to Play';
+  pressedKeys.clear();
 });
 
 // Keyboard input
