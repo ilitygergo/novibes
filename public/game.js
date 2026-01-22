@@ -315,18 +315,10 @@ function updateHUD(state) {
       div.className = "hud-control";
       let powerupText = "";
       if (player.powerupEffects && player.powerupEffects.length > 0) {
-        // Show the effect with the longest remaining time
-        let maxEffect = player.powerupEffects[0];
-        let maxRemaining = maxEffect.endFrame - state.frameCount;
-        for (const effect of player.powerupEffects) {
-          const remaining = effect.endFrame - state.frameCount;
-          if (remaining > maxRemaining) {
-            maxRemaining = remaining;
-            maxEffect = effect;
-          }
-        }
-        const remaining = Math.ceil(maxRemaining / 60);
-        powerupText = ` (${maxEffect.type === "speed_boost" ? "Speed+" : "Speed-"} ${remaining}s)`;
+        // Show the latest collected effect
+        const latestEffect = player.powerupEffects[player.powerupEffects.length - 1];
+        const remaining = Math.ceil((latestEffect.endFrame - state.frameCount) / 60);
+        powerupText = ` (${latestEffect.type === "speed_boost" ? "Speed+" : "Speed-"} ${remaining}s)`;
       }
       div.innerHTML = `
         <span style="color: ${player.color}">${player.name}${powerupText}</span>
@@ -424,29 +416,25 @@ function renderGame(state) {
   state.players.forEach((player) => {
     if (!player.alive) return;
 
-    // Draw powerup aura if active
+    // Draw powerup aura if active (shows latest collected)
     if (player.powerupEffects && player.powerupEffects.length > 0) {
-      // Find the effect with the most remaining time for aura
-      let maxRemaining = 0;
-      let auraColor = "#FFFFFF";
-      for (const effect of player.powerupEffects) {
-        const remaining = effect.endFrame - state.frameCount;
-        if (remaining > maxRemaining) {
-          maxRemaining = remaining;
-          auraColor = effect.type === "speed_boost" ? "#00FF00" : "#FF0000";
-        }
-      }
-      const progress = maxRemaining / (10 * 60); // 10 seconds at 60 FPS
-      const radius = TRAIL_WIDTH * 1.5 + progress * 10;
+      const latestEffect = player.powerupEffects[player.powerupEffects.length - 1];
+      const remaining = latestEffect.endFrame - state.frameCount;
+      if (remaining > 0) {
+        const progress = remaining / (10 * 60); // 10 seconds at 60 FPS
+        const radius = TRAIL_WIDTH * 2.5 + progress * 15;
 
-      ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = auraColor;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        ctx.strokeStyle = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     ctx.fillStyle = player.color;
