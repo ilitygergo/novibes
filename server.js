@@ -40,8 +40,8 @@ const PLAYER_COLORS = [
 
 // Control schemes for players
 const CONTROL_SCHEMES = [
-  { left: 'a', right: 'd', name: 'A/D' },
   { left: 'ArrowLeft', right: 'ArrowRight', name: 'Arrows' },
+  { left: 'a', right: 'd', name: 'A/D' },
   { left: 'j', right: 'l', name: 'J/L' },
   { left: 'z', right: 'c', name: 'Z/C' },
   { left: '4', right: '6', name: '4/6' },

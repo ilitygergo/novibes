@@ -67,8 +67,8 @@ To test with multiple players on the same computer:
 
 Each player is assigned a unique control scheme:
 
-- **Player 1**: A (left) / D (right)
-- **Player 2**: ← (left) / → (right)
+- **Player 1**: ← (left) / → (right)
+- **Player 2**: A (left) / D (right)
 - **Player 3**: J (left) / L (right)
 - **Player 4**: Z (left) / C (right)
 - **Player 5**: 4 (left) / 6 (right)
