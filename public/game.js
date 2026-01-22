@@ -20,13 +20,15 @@ const roundEnd = document.getElementById('roundEnd');
 const hudPlayerList = document.getElementById('hudPlayerList');
 const hudControlsList = document.getElementById('hudControlsList');
 
-// Socket connection
-const socket = io();
+// Socket connection - change this URL to your deployed server
+const SERVER_URL = "https://gregdoes.dev";
+const socket = io(SERVER_URL);
 
 // Client state
 let myPlayerId = null;
 let currentGameState = null;
 let pressedKeys = new Set();
+let explosions = [];
 
 const ROUND_END_OVERLAY_DELAY_MS = 700;
 let roundEndOverlayVisible = true;
@@ -335,6 +337,26 @@ function showRoundEnd(state) {
     `;
     scoreBoard.appendChild(div);
   });
+}
+
+// Create explosion effect
+function createExplosion(x, y, color) {
+  const particles = [];
+  const numParticles = 20;
+  for (let i = 0; i < numParticles; i++) {
+    const angle = (Math.PI * 2 * i) / numParticles;
+    const speed = Math.random() * 5 + 2;
+    particles.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 60, // frames
+      maxLife: 60,
+      color: color
+    });
+  }
+  explosions.push({ particles });
 }
 
 // Render game
