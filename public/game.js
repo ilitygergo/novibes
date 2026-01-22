@@ -685,20 +685,28 @@ function normalizeGameStateSnapshot(previous, next) {
   return { ...(previous || {}), ...(next || {}), readyPlayers, players };
 }
 
-// Animation loop for smooth rendering
-function animate() {
-  if (
-    currentGameState &&
-    (currentGameState.state === "playing" ||
-      currentGameState.state === "round_end")
-  ) {
-    renderGame(currentGameState);
+// Animation loop for constant FPS rendering
+const TARGET_FPS = 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
+let lastFrameTime = 0;
+
+function animate(currentTime) {
+  if (currentTime - lastFrameTime >= FRAME_TIME) {
+    lastFrameTime = currentTime;
+
+    if (
+      currentGameState &&
+      (currentGameState.state === "playing" ||
+        currentGameState.state === "round_end")
+    ) {
+      renderGame(currentGameState);
+    }
   }
   requestAnimationFrame(animate);
 }
 
 // Start animation loop
-animate();
+requestAnimationFrame(animate);
 
 // Handle window resize
 window.addEventListener("resize", () => {
