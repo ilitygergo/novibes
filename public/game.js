@@ -442,10 +442,19 @@ function renderGame(state) {
     ctx.arc(player.x, player.y, TRAIL_WIDTH * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 14px Inter, sans-serif";
-    ctx.textAlign = "center";
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 14px Inter, sans-serif';
+    ctx.textAlign = 'center';
     ctx.fillText(player.name, player.x, player.y - 15);
+
+    // Draw powerup timer if active
+    if (player.powerupEffects && player.powerupEffects.length > 0) {
+      const latestEffect = player.powerupEffects[player.powerupEffects.length - 1];
+      const remaining = Math.ceil((latestEffect.endFrame - state.frameCount) / 60);
+      ctx.fillStyle = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
+      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.fillText(`${remaining}s`, player.x, player.y + 20);
+    }
   });
 
   // Draw powerups
