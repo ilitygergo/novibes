@@ -416,24 +416,14 @@ function renderGame(state) {
   state.players.forEach((player) => {
     if (!player.alive) return;
 
-    // Draw powerup aura if active (shows latest collected)
+    // Draw powerup progress ring if active (shows latest collected)
     if (player.powerupEffects && player.powerupEffects.length > 0) {
       const latestEffect = player.powerupEffects[player.powerupEffects.length - 1];
       const remaining = latestEffect.endFrame - state.frameCount;
       if (remaining > 0) {
         const progress = remaining / (10 * 60); // 10 seconds at 60 FPS
-        const radius = TRAIL_WIDTH * 2.5 + progress * 15;
-
-        ctx.save();
-        ctx.globalAlpha = 0.8;
-        ctx.strokeStyle = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
-        ctx.lineWidth = 4;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
+        const color = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
+        drawPowerupProgressRing(player.x, player.y, progress, color);
       }
     }
 
@@ -451,9 +441,13 @@ function renderGame(state) {
     if (player.powerupEffects && player.powerupEffects.length > 0) {
       const latestEffect = player.powerupEffects[player.powerupEffects.length - 1];
       const remaining = Math.ceil((latestEffect.endFrame - state.frameCount) / 60);
-      ctx.fillStyle = latestEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
-      ctx.font = 'bold 12px Inter, sans-serif';
-      ctx.fillText(`${remaining}s`, player.x, player.y + 20);
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(`${remaining}s`, player.x, player.y + 22);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(`${remaining}s`, player.x, player.y + 22);
     }
   });
 
@@ -497,6 +491,36 @@ function renderGame(state) {
 
   // Draw collision VFX on top
   drawEffects(state);
+}
+
+// Draw circular progress ring for powerup duration
+function drawPowerupProgressRing(x, y, progress, color) {
+  const outerRadius = TRAIL_WIDTH * 3;
+  const innerRadius = TRAIL_WIDTH * 2;
+  const startAngle = -Math.PI / 2; // Start from top
+  const endAngle = startAngle + (progress * Math.PI * 2);
+
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+
+  // Draw background ring (full gray ring)
+  ctx.strokeStyle = 'rgba(128, 128, 128, 0.3)';
+  ctx.lineWidth = outerRadius - innerRadius;
+  ctx.beginPath();
+  ctx.arc(x, y, (outerRadius + innerRadius) / 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Draw progress arc
+  ctx.strokeStyle = color;
+  ctx.lineWidth = outerRadius - innerRadius;
+  ctx.lineCap = 'round';
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = color;
+  ctx.beginPath();
+  ctx.arc(x, y, (outerRadius + innerRadius) / 2, startAngle, endAngle);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawEffects(state) {
