@@ -21,7 +21,7 @@ const hudPlayerList = document.getElementById('hudPlayerList');
 const hudControlsList = document.getElementById('hudControlsList');
 
 // Socket connection - change this URL to your deployed server
-const SERVER_URL = 'https://curve-fever-multiplayer.fly.dev';
+const SERVER_URL = "https://gregdoes.dev";
 const socket = io(SERVER_URL);
 
 // Client state
