@@ -9,4 +9,6 @@ COPY . .
 
 EXPOSE 8080
 
+ENV NODE_OPTIONS="--legacy-openssl-provider"
+
 CMD ["npm", "start"]
