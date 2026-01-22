@@ -21,6 +21,9 @@ const COUNTDOWN_DURATION = 3;
 const FPS = 60;
 const FRAME_INTERVAL = 1000 / FPS;
 
+const EFFECT_DURATION_FRAMES = 36;
+const HEAD_COLLISION_DISTANCE = TRAIL_WIDTH * 2.2;
+
 // Player colors (10 distinct vibrant colors)
 const PLAYER_COLORS = [
   '#E20074', // Telekom Magenta
@@ -55,8 +58,11 @@ let gameState = {
   countdown: 0,
   players: [],
   readyPlayers: new Set(),
-  frameCount: 0
+  frameCount: 0,
+  effects: []
 };
+
+let nextEffectId = 1;
 
 // Serve static files
 app.use(express.static('public'));
@@ -74,7 +80,7 @@ io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
 
   // Send current game state to new player
-  socket.emit('gameState', gameState);
+  socket.emit('gameState', serializeGameState({ includeTrails: true }));
 
   // Handle player join
   socket.on('joinGame', (playerName) => {
@@ -100,7 +106,7 @@ io.on('connection', (socket) => {
     };
 
     gameState.players.push(player);
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
     console.log(`${playerName} joined (${gameState.players.length}/10)`);
   });
 
@@ -115,7 +121,7 @@ io.on('connection', (socket) => {
       startCountdown();
     }
 
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
   });
 
   // Handle player input
@@ -140,7 +146,7 @@ io.on('connection', (socket) => {
         resetToLobby();
       }
 
-      io.emit('gameState', gameState);
+      io.emit('gameState', serializeGameState({ includeTrails: false }));
     }
   });
 });
@@ -152,7 +158,7 @@ function startCountdown() {
 
   const countdownInterval = setInterval(() => {
     gameState.countdown--;
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
 
     if (gameState.countdown <= 0) {
       clearInterval(countdownInterval);
@@ -163,15 +169,55 @@ function startCountdown() {
 
 // Initialize player positions
 function initializePlayers() {
-  const padding = 100;
-  gameState.players.forEach((player, index) => {
-    // Position players around the edges
-    const angle = (index / gameState.players.length) * Math.PI * 2;
-    const radius = Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) / 3;
+  const padding = 40;
+  const minSpawnDistance = 60;
+  const maxAttemptsPerPlayer = 200;
+  const placed = [];
+  const centerX = CANVAS_WIDTH / 2;
+  const centerY = CANVAS_HEIGHT / 2;
+  const spawnRadius = 160;
 
-    player.x = CANVAS_WIDTH / 2 + Math.cos(angle) * radius;
-    player.y = CANVAS_HEIGHT / 2 + Math.sin(angle) * radius;
-    player.angle = angle + Math.PI; // Face center
+  gameState.players.forEach((player) => {
+    let spawn = null;
+
+    for (let attempt = 0; attempt < maxAttemptsPerPlayer; attempt++) {
+      // Bias spawns toward the center so players start closer together.
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.sqrt(Math.random()) * spawnRadius;
+      const x = clamp(centerX + Math.cos(angle) * radius, padding, CANVAS_WIDTH - padding);
+      const y = clamp(centerY + Math.sin(angle) * radius, padding, CANVAS_HEIGHT - padding);
+
+      let ok = true;
+      for (const p of placed) {
+        const dx = x - p.x;
+        const dy = y - p.y;
+        if (Math.sqrt(dx * dx + dy * dy) < minSpawnDistance) {
+          ok = false;
+          break;
+        }
+      }
+
+      if (ok) {
+        spawn = { x, y };
+        break;
+      }
+    }
+
+    // Fallback: if we couldn't find a good spot, just accept a random one.
+    if (!spawn) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.sqrt(Math.random()) * spawnRadius;
+      spawn = {
+        x: clamp(centerX + Math.cos(angle) * radius, padding, CANVAS_WIDTH - padding),
+        y: clamp(centerY + Math.sin(angle) * radius, padding, CANVAS_HEIGHT - padding)
+      };
+    }
+
+    placed.push(spawn);
+
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.angle = Math.random() * Math.PI * 2;
     player.alive = true;
     player.trail = [];
     player.turning = 0;
@@ -183,30 +229,41 @@ function initializePlayers() {
 function startGame() {
   gameState.state = 'playing';
   gameState.frameCount = 0;
+  gameState.effects = [];
   gameState.readyPlayers.clear();
   initializePlayers();
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
 }
 
 // Game loop
 setInterval(() => {
   if (gameState.state === 'playing') {
-    updateGame();
-    io.emit('gameState', gameState);
+    const { trailUpdates } = updateGame();
+    io.emit('frame', serializeFrame({ trailUpdates }));
+    return;
+  }
+
+  // Keep animating collision effects briefly after the round ends.
+  if (gameState.state === 'round_end' && gameState.effects.length) {
+    tickEffectsOnly();
+    io.emit('frame', serializeFrame({ trailUpdates: [] }));
   }
 }, FRAME_INTERVAL);
 
 // Update game state
 function updateGame() {
   gameState.frameCount++;
-  let alivePlayers = 0;
-  let lastAlivePlayer = null;
+  const trailUpdates = [];
+
+  // Tick & prune effects
+  if (gameState.effects.length) {
+    gameState.effects = gameState.effects.filter(effect => {
+      return (gameState.frameCount - effect.createdAtFrame) < effect.durationFrames;
+    });
+  }
 
   gameState.players.forEach(player => {
     if (!player.alive) return;
-
-    alivePlayers++;
-    lastAlivePlayer = player;
 
     // Update angle based on turning
     player.angle += player.turning * TURN_SPEED;
@@ -219,6 +276,12 @@ function updateGame() {
     if (player.x < 0 || player.x > CANVAS_WIDTH ||
         player.y < 0 || player.y > CANVAS_HEIGHT) {
       player.alive = false;
+      addEffect({
+        x: clamp(player.x, 0, CANVAS_WIDTH),
+        y: clamp(player.y, 0, CANVAS_HEIGHT),
+        kind: 'wall',
+        colors: [player.color]
+      });
       return;
     }
 
@@ -231,24 +294,65 @@ function updateGame() {
       const lastPoint = player.trail[player.trail.length - 1];
       const isAfterGap = lastPoint && (player.gapCounter % GAP_INTERVAL) === GAP_LENGTH;
 
-      player.trail.push({
+      const point = {
         x: player.x,
         y: player.y,
         afterGap: isAfterGap // Mark if this point is right after a gap
-      });
+      };
+
+      player.trail.push(point);
+      trailUpdates.push({ playerId: player.id, point });
 
       // Check collision with all trails
-      if (checkCollision(player)) {
+      const collision = checkCollision(player);
+      if (collision.hit) {
         player.alive = false;
+        addEffect({
+          x: clamp(player.x, 0, CANVAS_WIDTH),
+          y: clamp(player.y, 0, CANVAS_HEIGHT),
+          kind: collision.self ? 'self' : 'trail',
+          colors: collision.self ? [player.color] : [player.color, collision.ownerColor]
+        });
         return;
       }
     }
   });
 
-  // Check for round end
-  if (alivePlayers <= 1) {
-    endRound(lastAlivePlayer);
+  // Check head-on collisions (player-player)
+  const alive = gameState.players.filter(p => p.alive);
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      const a = alive[i];
+      const b = alive[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      if (Math.sqrt(dx * dx + dy * dy) < HEAD_COLLISION_DISTANCE) {
+        a.alive = false;
+        b.alive = false;
+        addEffect({
+          x: clamp((a.x + b.x) / 2, 0, CANVAS_WIDTH),
+          y: clamp((a.y + b.y) / 2, 0, CANVAS_HEIGHT),
+          kind: 'player',
+          colors: [a.color, b.color]
+        });
+      }
+    }
   }
+
+  // Check for round end
+  const alivePlayers = gameState.players.filter(p => p.alive);
+  if (alivePlayers.length <= 1) {
+    endRound(alivePlayers[0] || null);
+  }
+
+  return { trailUpdates };
+}
+
+function tickEffectsOnly() {
+  gameState.frameCount++;
+  gameState.effects = gameState.effects.filter(effect => {
+    return (gameState.frameCount - effect.createdAtFrame) < effect.durationFrames;
+  });
 }
 
 // Check collision with trails
@@ -269,12 +373,17 @@ function checkCollision(player) {
       if (p2.afterGap) continue;
 
       if (distanceToSegment(checkPoint, p1, p2) < TRAIL_WIDTH) {
-        return true;
+        return {
+          hit: true,
+          self: otherPlayer.id === player.id,
+          ownerId: otherPlayer.id,
+          ownerColor: otherPlayer.color
+        };
       }
     }
   }
 
-  return false;
+  return { hit: false };
 }
 
 // Distance from point to line segment
@@ -301,7 +410,7 @@ function endRound(winner) {
     winner.score++;
   }
 
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
 
   // Auto-start new round after 3 seconds
   setTimeout(() => {
@@ -318,11 +427,65 @@ function resetToLobby() {
   gameState.state = 'lobby';
   gameState.countdown = 0;
   gameState.readyPlayers.clear();
+  gameState.effects = [];
   gameState.players.forEach(player => {
     player.alive = false;
     player.trail = [];
   });
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
+}
+
+function addEffect({ x, y, kind, colors }) {
+  gameState.effects.push({
+    id: nextEffectId++,
+    kind,
+    x,
+    y,
+    colors,
+    createdAtFrame: gameState.frameCount,
+    durationFrames: EFFECT_DURATION_FRAMES
+  });
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function serializeGameState({ includeTrails }) {
+  return {
+    state: gameState.state,
+    countdown: gameState.countdown,
+    frameCount: gameState.frameCount,
+    readyPlayers: Array.from(gameState.readyPlayers),
+    effects: gameState.effects,
+    players: gameState.players.map(player => serializePlayer(player, { includeTrail: includeTrails }))
+  };
+}
+
+function serializeFrame({ trailUpdates }) {
+  return {
+    state: gameState.state,
+    countdown: gameState.countdown,
+    frameCount: gameState.frameCount,
+    effects: gameState.effects,
+    players: gameState.players.map(player => serializePlayer(player, { includeTrail: false })),
+    trailUpdates
+  };
+}
+
+function serializePlayer(player, { includeTrail }) {
+  return {
+    id: player.id,
+    name: player.name,
+    color: player.color,
+    controls: player.controls,
+    x: player.x,
+    y: player.y,
+    angle: player.angle,
+    alive: player.alive,
+    score: player.score,
+    trail: includeTrail ? player.trail : undefined
+  };
 }
 
 // Start server
