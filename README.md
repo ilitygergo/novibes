@@ -17,7 +17,7 @@ A browser-based multiplayer Curve Fever (Achtung die Kurve) game with real-time 
 - Players can only turn left or right using their assigned keys
 - Periodic gaps appear in the trails
 - Power-ups spawn randomly on the map, providing temporary effects like speed boosts or slowdowns
-- Collision with any trail (including your own) or arena walls eliminates you
+- Collision with any trail (including your own) eliminates you
 - Last player surviving wins the round
 - First player to reach 10 wins ends the match
 - Scores persist across rounds
@@ -89,7 +89,7 @@ Your assigned controls are displayed in the lobby and in the game HUD.
 3. **Trails**: Your line leaves a colored trail behind it
 4. **Gaps**: Periodic gaps appear in your trail (safe to pass through)
 5. **Power-ups**: Collect power-ups for temporary effects (e.g., speed changes)
-6. **Collision**: Hitting any trail or wall eliminates you
+6. **Collision**: Hitting any trail eliminates you
 7. **Winning**: Be the last player alive to win the round
 8. **Scoring**: Winner gets 1 point per round
 9. **Match End**: First player to reach 10 points wins the match

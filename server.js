@@ -116,7 +116,8 @@ io.on('connection', (socket) => {
       turning: 0, // -1 left, 0 straight, 1 right
       gapCounter: Math.floor(Math.random() * GAP_INTERVAL),
       speed: PLAYER_SPEED,
-      powerupEffect: null
+      powerupEffect: null,
+      justWrapped: false
     };
 
     gameState.players.push(player);
@@ -300,17 +301,13 @@ function updateGame() {
     player.x += Math.cos(player.angle) * player.speed;
     player.y += Math.sin(player.angle) * player.speed;
 
-    // Check wall collision
-    if (player.x < 0 || player.x > CANVAS_WIDTH ||
-        player.y < 0 || player.y > CANVAS_HEIGHT) {
-      player.alive = false;
-      addEffect({
-        x: clamp(player.x, 0, CANVAS_WIDTH),
-        y: clamp(player.y, 0, CANVAS_HEIGHT),
-        kind: 'wall',
-        colors: [player.color]
-      });
-      return;
+    // Wrap around edges
+    if (player.x < 0 || player.x > CANVAS_WIDTH || player.y < 0 || player.y > CANVAS_HEIGHT) {
+      player.justWrapped = true;
+      if (player.x < 0) player.x += CANVAS_WIDTH;
+      else if (player.x > CANVAS_WIDTH) player.x -= CANVAS_WIDTH;
+      if (player.y < 0) player.y += CANVAS_HEIGHT;
+      else if (player.y > CANVAS_HEIGHT) player.y -= CANVAS_HEIGHT;
     }
 
     // Check powerup collision
@@ -328,8 +325,10 @@ function updateGame() {
       const point = {
         x: player.x,
         y: player.y,
-        afterGap: isAfterGap // Mark if this point is right after a gap
+        afterGap: isAfterGap || player.justWrapped // Mark if this point is right after a gap or wrap
       };
+
+      player.justWrapped = false;
 
       player.trail.push(point);
       trailUpdates.push({ playerId: player.id, point });
