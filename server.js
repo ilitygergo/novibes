@@ -60,6 +60,10 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
@@ -317,7 +321,7 @@ function resetToLobby() {
 }
 
 // Start server
-http.listen(PORT, () => {
-  console.log(`🎮 Curve Fever server running on http://localhost:${PORT}`);
+http.listen(PORT, '0.0.0.0', () => {
+  console.log(`🎮 Curve Fever server running on http://0.0.0.0:${PORT}`);
   console.log(`📡 Waiting for players to connect...`);
 });

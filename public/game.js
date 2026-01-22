@@ -20,13 +20,15 @@ const roundEnd = document.getElementById('roundEnd');
 const hudPlayerList = document.getElementById('hudPlayerList');
 const hudControlsList = document.getElementById('hudControlsList');
 
-// Socket connection
-const socket = io();
+// Socket connection - change this URL to your deployed server
+const SERVER_URL = 'https://curve-fever-multiplayer.fly.dev';
+const socket = io(SERVER_URL);
 
 // Client state
 let myPlayerId = null;
 let currentGameState = null;
 let pressedKeys = new Set();
+let explosions = [];
 
 // Setup canvas
 canvas.width = CANVAS_WIDTH;
@@ -39,6 +41,45 @@ socket.on('connect', () => {
 });
 
 socket.on('gameState', (state) => {
+  // Detect player deaths for explosion effects
+  if (currentGameState) {
+    state.players.forEach(player => {
+      const prevPlayer = currentGameState.players.find(p => p.id === player.id);
+      if (prevPlayer && prevPlayer.alive && !player.alive) {
+        // Player died, create explosion
+        createExplosion(player.x, player.y, player.color);
+    }
+  });
+
+  // Update and draw explosions
+  explosions.forEach((explosion, explosionIndex) => {
+    explosion.particles.forEach((particle, particleIndex) => {
+      particle.x += particle.vx;
+      particle.y += particle.vy;
+      particle.life--;
+      if (particle.life <= 0) {
+        explosion.particles.splice(particleIndex, 1);
+      }
+    });
+    if (explosion.particles.length === 0) {
+      explosions.splice(explosionIndex, 1);
+    }
+  });
+
+  // Draw explosions
+  explosions.forEach(explosion => {
+    explosion.particles.forEach(particle => {
+      const alpha = particle.life / particle.maxLife;
+      ctx.fillStyle = particle.color;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+  ctx.globalAlpha = 1;
+}
+
   currentGameState = state;
   updateUI(state);
 
@@ -233,6 +274,26 @@ function showRoundEnd(state) {
     `;
     scoreBoard.appendChild(div);
   });
+}
+
+// Create explosion effect
+function createExplosion(x, y, color) {
+  const particles = [];
+  const numParticles = 20;
+  for (let i = 0; i < numParticles; i++) {
+    const angle = (Math.PI * 2 * i) / numParticles;
+    const speed = Math.random() * 5 + 2;
+    particles.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 60, // frames
+      maxLife: 60,
+      color: color
+    });
+  }
+  explosions.push({ particles });
 }
 
 // Render game
