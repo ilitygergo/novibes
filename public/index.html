@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Curve Fever - Multiplayer Game</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Lobby Screen -->
+    <div id="lobby" class="screen">
+      <div class="lobby-container">
+        <div class="header">
+          <h1 class="title">CURVE FEVER</h1>
+          <p class="subtitle">Multiplayer Arena</p>
+        </div>
+
+        <div class="lobby-content">
+          <!-- Join Form -->
+          <div id="joinForm" class="card">
+            <h2>Join Game</h2>
+            <input
+              type="text"
+              id="playerNameInput"
+              placeholder="Enter your name..."
+              maxlength="20"
+              autocomplete="off"
+            >
+            <button id="joinButton" class="btn btn-primary">Join Lobby</button>
+          </div>
+
+          <!-- Lobby Panel -->
+          <div id="lobbyPanel" class="card" style="display: none;">
+            <div class="lobby-header">
+              <h2>Players in Lobby</h2>
+              <span id="playerCount" class="player-count">0/10</span>
+            </div>
+
+            <div id="playerList" class="player-list"></div>
+
+            <div class="lobby-actions">
+              <button id="readyButton" class="btn btn-primary">Ready to Play</button>
+              <p class="hint">Waiting for all players to ready up (min 2 players)...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen" style="display: none;">
+      <!-- Countdown Overlay -->
+      <div id="countdown" class="countdown" style="display: none;">
+        <div class="countdown-number"></div>
+        <div class="countdown-text">GET READY!</div>
+      </div>
+
+      <!-- Round End Overlay -->
+      <div id="roundEnd" class="round-end" style="display: none;">
+        <div class="round-end-content">
+          <h2 id="winnerText"></h2>
+          <div id="scoreBoard" class="score-board"></div>
+          <p class="hint">Next round starting soon...</p>
+        </div>
+      </div>
+
+      <!-- Game HUD -->
+      <div id="gameHUD" class="game-hud">
+        <div class="hud-players">
+          <h3>Players</h3>
+          <div id="hudPlayerList"></div>
+        </div>
+
+        <div class="hud-controls">
+          <h3>Controls</h3>
+          <div id="hudControlsList"></div>
+        </div>
+      </div>
+
+      <!-- Game Canvas -->
+      <canvas id="gameCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Socket.io Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Game Script -->
+  <script src="game.js"></script>
+</body>
+</html>
