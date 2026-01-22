@@ -28,6 +28,10 @@ let myPlayerId = null;
 let currentGameState = null;
 let pressedKeys = new Set();
 
+const ROUND_END_OVERLAY_DELAY_MS = 700;
+let roundEndOverlayVisible = true;
+let roundEndOverlayTimer = null;
+
 // Setup canvas
 canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
@@ -39,10 +43,27 @@ socket.on('connect', () => {
 });
 
 socket.on('gameState', (state) => {
+  const previousState = currentGameState?.state;
   currentGameState = state;
+
+  if (state.state === 'round_end' && previousState !== 'round_end') {
+    roundEndOverlayVisible = false;
+    if (roundEndOverlayTimer) clearTimeout(roundEndOverlayTimer);
+    roundEndOverlayTimer = setTimeout(() => {
+      roundEndOverlayVisible = true;
+      updateUI(currentGameState);
+    }, ROUND_END_OVERLAY_DELAY_MS);
+  } else if (state.state !== 'round_end') {
+    roundEndOverlayVisible = true;
+    if (roundEndOverlayTimer) {
+      clearTimeout(roundEndOverlayTimer);
+      roundEndOverlayTimer = null;
+    }
+  }
+
   updateUI(state);
 
-  if (state.state === 'playing') {
+  if (state.state === 'playing' || state.state === 'round_end') {
     renderGame(state);
   }
 });
@@ -127,8 +148,17 @@ function updateUI(state) {
       break;
 
     case 'round_end':
-      roundEnd.style.display = 'flex';
-      showRoundEnd(state);
+      lobby.style.display = 'none';
+      gameScreen.style.display = 'flex';
+      countdown.style.display = 'none';
+
+      if (roundEndOverlayVisible) {
+        roundEnd.style.display = 'flex';
+        showRoundEnd(state);
+      } else {
+        roundEnd.style.display = 'none';
+        updateHUD(state);
+      }
       break;
   }
 }
@@ -309,11 +339,82 @@ function renderGame(state) {
       ctx.fillText(player.name, player.x, player.y - 15);
     }
   });
+
+  // Draw collision VFX on top
+  drawEffects(state);
+}
+
+function drawEffects(state) {
+  if (!state.effects || state.effects.length === 0) return;
+
+  const currentFrame = state.frameCount ?? 0;
+
+  for (const effect of state.effects) {
+    const progressRaw = (currentFrame - effect.createdAtFrame) / effect.durationFrames;
+    const progress = Math.max(0, Math.min(1, progressRaw));
+    const fade = 1 - progress;
+
+    const radius = 6 + progress * 34;
+    const lineWidth = 2 + fade * 3;
+    const alpha = 0.75 * fade;
+
+    // Outer ring(s)
+    const colors = Array.isArray(effect.colors) && effect.colors.length ? effect.colors : ['#FFFFFF'];
+    for (let i = 0; i < colors.length; i++) {
+      const color = colors[i];
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.shadowBlur = 12 * fade;
+      ctx.shadowColor = color;
+
+      // Slightly offset multi-color rings so both are visible
+      const r = radius + i * 2;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Sparks (deterministic per effect.id)
+    const sparkCount = effect.kind === 'player' ? 14 : 10;
+    for (let s = 0; s < sparkCount; s++) {
+      const seed = (effect.id ?? 1) * 997 + s * 101;
+      const angle = seeded01(seed) * Math.PI * 2;
+      const len = (8 + seeded01(seed + 7) * 14) * fade;
+      const inner = radius * (0.6 + seeded01(seed + 13) * 0.4);
+
+      const x1 = effect.x + Math.cos(angle) * inner;
+      const y1 = effect.y + Math.sin(angle) * inner;
+      const x2 = effect.x + Math.cos(angle) * (inner + len);
+      const y2 = effect.y + Math.sin(angle) * (inner + len);
+
+      const color = colors[s % colors.length];
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.shadowBlur = 8 * fade;
+      ctx.shadowColor = color;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+function seeded01(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
 }
 
 // Animation loop for smooth rendering
 function animate() {
-  if (currentGameState && currentGameState.state === 'playing') {
+  if (currentGameState && (currentGameState.state === 'playing' || currentGameState.state === 'round_end')) {
     renderGame(currentGameState);
   }
   requestAnimationFrame(animate);

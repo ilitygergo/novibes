@@ -1,0 +1,147 @@
+﻿diff --git a/server.js b/server.js
+index 6b1a9d1..f6d7e1a 100644
+--- a/server.js
++++ b/server.js
+@@
+ const GAP_LENGTH = 15; // frames of gap
+ const COUNTDOWN_DURATION = 3;
+ const FPS = 60;
+ const FRAME_INTERVAL = 1000 / FPS;
++
++const EFFECT_DURATION_FRAMES = 36;
++const HEAD_COLLISION_DISTANCE = TRAIL_WIDTH * 2.2;
+@@
+ let gameState = {
+   state: 'lobby', // lobby, countdown, playing, round_end
+   countdown: 0,
+   players: [],
+   readyPlayers: new Set(),
+-  frameCount: 0
++  frameCount: 0,
++  effects: []
+ };
++
++let nextEffectId = 1;
+@@
+ function updateGame() {
+   gameState.frameCount++;
+-  let alivePlayers = 0;
+-  let lastAlivePlayer = null;
++
++  // Tick & prune effects
++  if (gameState.effects.length) {
++    gameState.effects = gameState.effects.filter(effect => {
++      return (gameState.frameCount - effect.createdAtFrame) < effect.durationFrames;
++    });
++  }
+ 
+   gameState.players.forEach(player => {
+     if (!player.alive) return;
+-
+-    alivePlayers++;
+-    lastAlivePlayer = player;
+@@
+     if (player.x < 0 || player.x > CANVAS_WIDTH ||
+         player.y < 0 || player.y > CANVAS_HEIGHT) {
+       player.alive = false;
++      addEffect({
++        x: clamp(player.x, 0, CANVAS_WIDTH),
++        y: clamp(player.y, 0, CANVAS_HEIGHT),
++        kind: 'wall',
++        colors: [player.color]
++      });
+       return;
+     }
+@@
+       // Check collision with all trails
+-      if (checkCollision(player)) {
++      const collision = checkCollision(player);
++      if (collision.hit) {
+         player.alive = false;
++        addEffect({
++          x: player.x,
++          y: player.y,
++          kind: collision.self ? 'self' : 'trail',
++          colors: collision.self ? [player.color] : [player.color, collision.ownerColor]
++        });
+         return;
+       }
+     }
+   });
++
++  // Check head-on collisions (player-player)
++  const alive = gameState.players.filter(p => p.alive);
++  for (let i = 0; i < alive.length; i++) {
++    for (let j = i + 1; j < alive.length; j++) {
++      const a = alive[i];
++      const b = alive[j];
++      const dx = a.x - b.x;
++      const dy = a.y - b.y;
++      if (Math.sqrt(dx * dx + dy * dy) < HEAD_COLLISION_DISTANCE) {
++        a.alive = false;
++        b.alive = false;
++        addEffect({
++          x: (a.x + b.x) / 2,
++          y: (a.y + b.y) / 2,
++          kind: 'player',
++          colors: [a.color, b.color]
++        });
++      }
++    }
++  }
+ 
+   // Check for round end
+-  if (alivePlayers <= 1) {
+-    endRound(lastAlivePlayer);
++  const alivePlayers = gameState.players.filter(p => p.alive);
++  if (alivePlayers.length <= 1) {
++    endRound(alivePlayers[0] || null);
+   }
+ }
+@@
+ function checkCollision(player) {
+   const checkPoint = { x: player.x, y: player.y };
+@@
+       if (distanceToSegment(checkPoint, p1, p2) < TRAIL_WIDTH) {
+-        return true;
++        return {
++          hit: true,
++          self: otherPlayer.id === player.id,
++          ownerId: otherPlayer.id,
++          ownerColor: otherPlayer.color
++        };
+       }
+     }
+   }
+ 
+-  return false;
++  return { hit: false };
+ }
+@@
+ function resetToLobby() {
+   gameState.state = 'lobby';
+   gameState.countdown = 0;
+   gameState.readyPlayers.clear();
++  gameState.effects = [];
+   gameState.players.forEach(player => {
+     player.alive = false;
+     player.trail = [];
+   });
+   io.emit('gameState', gameState);
+ }
++
++function addEffect({ x, y, kind, colors }) {
++  gameState.effects.push({
++    id: nextEffectId++,
++    kind,
++    x,
++    y,
++    colors,
++    createdAtFrame: gameState.frameCount,
++    durationFrames: EFFECT_DURATION_FRAMES
++  });
++}
++
++function clamp(value, min, max) {
++  return Math.max(min, Math.min(max, value));
++}
