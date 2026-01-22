@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
       turning: 0, // -1 left, 0 straight, 1 right
       gapCounter: Math.floor(Math.random() * GAP_INTERVAL),
       speed: PLAYER_SPEED,
-      powerupEffect: null,
+      powerupEffects: [],
       justWrapped: false
     };
 
@@ -238,7 +238,7 @@ function initializePlayers() {
     player.turning = 0;
     player.gapCounter = Math.floor(Math.random() * GAP_INTERVAL);
     player.speed = PLAYER_SPEED;
-    player.powerupEffect = null;
+    player.powerupEffects = [];
     player.justWrapped = false;
   });
 }
@@ -288,10 +288,12 @@ function updateGame() {
 
   // Update powerup effects
   gameState.players.forEach(player => {
-    if (player.powerupEffect && player.powerupEffect.endFrame <= gameState.frameCount) {
-      player.speed = PLAYER_SPEED;
-      player.powerupEffect = null;
+    player.powerupEffects = player.powerupEffects.filter(effect => effect.endFrame > gameState.frameCount);
+    let totalMultiplier = 1;
+    for (const effect of player.powerupEffects) {
+      totalMultiplier *= effect.multiplier;
     }
+    player.speed = PLAYER_SPEED * totalMultiplier;
   });
 
   gameState.players.forEach(player => {
@@ -557,11 +559,11 @@ function checkPowerupCollision(player) {
 
 function applyPowerupEffect(player, powerupType) {
   if (powerupType.effect === 'speed') {
-    player.speed = PLAYER_SPEED * powerupType.multiplier;
-    player.powerupEffect = {
+    player.powerupEffects.push({
       type: powerupType.id,
+      multiplier: powerupType.multiplier,
       endFrame: gameState.frameCount + POWERUP_DURATION
-    };
+    });
   }
 }
 
@@ -577,7 +579,7 @@ function serializePlayer(player, { includeTrail }) {
     alive: player.alive,
     score: player.score,
     trail: includeTrail ? player.trail : undefined,
-    powerupEffect: player.powerupEffect
+    powerupEffects: player.powerupEffects
   };
 }
 
