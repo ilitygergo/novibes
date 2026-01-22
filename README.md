@@ -19,6 +19,7 @@ A browser-based multiplayer Curve Fever (Achtung die Kurve) game with real-time 
 - Power-ups spawn randomly on the map, providing temporary effects like speed boosts or slowdowns
 - Collision with any trail (including your own) or arena walls eliminates you
 - Last player surviving wins the round
+- First player to reach 10 wins ends the match
 - Scores persist across rounds
 
 ## Technology Stack
@@ -91,6 +92,7 @@ Your assigned controls are displayed in the lobby and in the game HUD.
 6. **Collision**: Hitting any trail or wall eliminates you
 7. **Winning**: Be the last player alive to win the round
 8. **Scoring**: Winner gets 1 point per round
+9. **Match End**: First player to reach 10 points wins the match
 
 ## Server Configuration
 

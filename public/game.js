@@ -182,12 +182,11 @@ function sendInput() {
   const player = currentGameState?.players.find(p => p.id === myPlayerId);
   if (!player) return;
 
-  const controls = player.controls;
   let turning = 0;
 
-  if (pressedKeys.has(controls.left)) {
+  if (pressedKeys.has('ArrowLeft')) {
     turning = -1;
-  } else if (pressedKeys.has(controls.right)) {
+  } else if (pressedKeys.has('ArrowRight')) {
     turning = 1;
   }
 
@@ -232,6 +231,14 @@ function updateUI(state) {
         roundEnd.style.display = 'none';
         updateHUD(state);
       }
+      break;
+
+    case 'game_over':
+      lobby.style.display = 'none';
+      gameScreen.style.display = 'flex';
+      countdown.style.display = 'none';
+      roundEnd.style.display = 'flex';
+      showGameOver(state);
       break;
   }
 }
@@ -344,6 +351,32 @@ function showRoundEnd(state) {
   });
 }
 
+// Show game over
+function showGameOver(state) {
+  const winnerText = document.getElementById('winnerText');
+
+  const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
+  const winner = sortedPlayers[0];
+
+  winnerText.textContent = `Game Over! ${winner.name} Wins the Match!`;
+  winnerText.style.color = winner.color;
+
+  // Update final scoreboard
+  const scoreBoard = document.getElementById('scoreBoard');
+  scoreBoard.innerHTML = '';
+
+  sortedPlayers.forEach(player => {
+    const div = document.createElement('div');
+    div.className = 'score-item';
+    div.style.borderLeftColor = player.color;
+    div.innerHTML = `
+      <span class="score-name">${player.name}</span>
+      <span class="score-points">${player.score}</span>
+    `;
+    scoreBoard.appendChild(div);
+  });
+}
+
 // Create explosion effect
 function createExplosion(x, y, color) {
   const particles = [];
@@ -406,13 +439,13 @@ function renderGame(state) {
       ctx.save();
       ctx.fillStyle = powerup.type.color;
       ctx.beginPath();
-      ctx.arc(powerup.x, powerup.y, 12, 0, Math.PI * 2);
+      ctx.arc(powerup.x, powerup.y, 20, 0, Math.PI * 2);
       ctx.fill();
 
       // Inner circle for contrast
       ctx.fillStyle = '#FFFFFF';
       ctx.beginPath();
-      ctx.arc(powerup.x, powerup.y, 8, 0, Math.PI * 2);
+      ctx.arc(powerup.x, powerup.y, 14, 0, Math.PI * 2);
       ctx.fill();
 
       // Icon (simple shape)
@@ -420,17 +453,17 @@ function renderGame(state) {
       if (powerup.type.id === 'speed_boost') {
         // Arrow up
         ctx.beginPath();
-        ctx.moveTo(powerup.x, powerup.y - 5);
-        ctx.lineTo(powerup.x - 3, powerup.y + 2);
-        ctx.lineTo(powerup.x + 3, powerup.y + 2);
+        ctx.moveTo(powerup.x, powerup.y - 8);
+        ctx.lineTo(powerup.x - 5, powerup.y + 3);
+        ctx.lineTo(powerup.x + 5, powerup.y + 3);
         ctx.closePath();
         ctx.fill();
       } else if (powerup.type.id === 'speed_slow') {
         // Arrow down
         ctx.beginPath();
-        ctx.moveTo(powerup.x, powerup.y + 5);
-        ctx.lineTo(powerup.x - 3, powerup.y - 2);
-        ctx.lineTo(powerup.x + 3, powerup.y - 2);
+        ctx.moveTo(powerup.x, powerup.y + 8);
+        ctx.lineTo(powerup.x - 5, powerup.y - 3);
+        ctx.lineTo(powerup.x + 5, powerup.y - 3);
         ctx.closePath();
         ctx.fill();
       }

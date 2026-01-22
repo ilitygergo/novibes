@@ -23,11 +23,12 @@ const FRAME_INTERVAL = 1000 / FPS;
 
 const EFFECT_DURATION_FRAMES = 36;
 const HEAD_COLLISION_DISTANCE = TRAIL_WIDTH * 2.2;
+const MAX_SCORE = 10;
 
 // Powerup constants
 const POWERUP_SPAWN_INTERVAL = 300; // frames between powerup spawns
 const POWERUP_DURATION = 10 * FPS; // 10 seconds at 60 FPS
-const POWERUP_RADIUS = 12;
+const POWERUP_RADIUS = 20;
 const POWERUP_TYPES = {
   SPEED_BOOST: { id: 'speed_boost', name: 'Speed Boost', color: '#00FF00', effect: 'speed', multiplier: 1.5 },
   SPEED_SLOW: { id: 'speed_slow', name: 'Speed Slow', color: '#FF0000', effect: 'speed', multiplier: 0.5 }
@@ -438,6 +439,11 @@ function endRound(winner) {
 
   if (winner) {
     winner.score++;
+    if (winner.score >= MAX_SCORE) {
+      gameState.state = 'game_over';
+      io.emit('gameState', serializeGameState({ includeTrails: false }));
+      return; // Don't auto-start new round
+    }
   }
 
   io.emit('gameState', serializeGameState({ includeTrails: false }));
