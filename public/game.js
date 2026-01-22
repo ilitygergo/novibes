@@ -4,21 +4,21 @@ const CANVAS_HEIGHT = 700;
 const TRAIL_WIDTH = 4;
 
 // DOM Elements
-const lobby = document.getElementById('lobby');
-const gameScreen = document.getElementById('gameScreen');
-const joinForm = document.getElementById('joinForm');
-const lobbyPanel = document.getElementById('lobbyPanel');
-const playerNameInput = document.getElementById('playerNameInput');
-const joinButton = document.getElementById('joinButton');
-const readyButton = document.getElementById('readyButton');
-const playerList = document.getElementById('playerList');
-const playerCount = document.getElementById('playerCount');
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const countdown = document.getElementById('countdown');
-const roundEnd = document.getElementById('roundEnd');
-const hudPlayerList = document.getElementById('hudPlayerList');
-const hudControlsList = document.getElementById('hudControlsList');
+const lobby = document.getElementById("lobby");
+const gameScreen = document.getElementById("gameScreen");
+const joinForm = document.getElementById("joinForm");
+const lobbyPanel = document.getElementById("lobbyPanel");
+const playerNameInput = document.getElementById("playerNameInput");
+const joinButton = document.getElementById("joinButton");
+const readyButton = document.getElementById("readyButton");
+const playerList = document.getElementById("playerList");
+const playerCount = document.getElementById("playerCount");
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const countdown = document.getElementById("countdown");
+const roundEnd = document.getElementById("roundEnd");
+const hudPlayerList = document.getElementById("hudPlayerList");
+const hudControlsList = document.getElementById("hudControlsList");
 
 // Socket connection - change this URL to your deployed server
 const SERVER_URL = "https://gregdoes.dev";
@@ -38,10 +38,10 @@ const HUD_UPDATE_INTERVAL_MS = 250;
 let lastHudUpdateMs = 0;
 
 // Cached render layers
-const backgroundCanvas = document.createElement('canvas');
-const backgroundCtx = backgroundCanvas.getContext('2d');
-const trailCanvas = document.createElement('canvas');
-const trailCtx = trailCanvas.getContext('2d');
+const backgroundCanvas = document.createElement("canvas");
+const backgroundCtx = backgroundCanvas.getContext("2d");
+const trailCanvas = document.createElement("canvas");
+const trailCtx = trailCanvas.getContext("2d");
 
 backgroundCanvas.width = CANVAS_WIDTH;
 backgroundCanvas.height = CANVAS_HEIGHT;
@@ -58,40 +58,45 @@ buildBackgroundLayer();
 resetTrailLayer();
 
 // Socket event handlers
-socket.on('connect', () => {
-  console.log('Connected to server');
+socket.on("connect", () => {
+  console.log("Connected to server");
   myPlayerId = socket.id;
 });
 
-socket.on('gameState', (state) => {
+socket.on("gameState", (state) => {
   const previousState = currentGameState?.state;
   currentGameState = normalizeGameStateSnapshot(currentGameState, state);
 
   if (state.state !== previousState) {
     // Clear trails when transitioning into/out of gameplay unless we received a full trail snapshot.
-    const hasTrailSnapshot = state.players?.some(p => Array.isArray(p.trail) && p.trail.length);
-    if (!hasTrailSnapshot && (state.state === 'playing' || previousState === 'playing')) {
+    const hasTrailSnapshot = state.players?.some(
+      (p) => Array.isArray(p.trail) && p.trail.length,
+    );
+    if (
+      !hasTrailSnapshot &&
+      (state.state === "playing" || previousState === "playing")
+    ) {
       resetTrailLayer();
     }
 
-    if (state.state === 'lobby') {
+    if (state.state === "lobby") {
       resetTrailLayer();
     }
   }
 
   // If the server sent a trail snapshot (e.g., joining mid-round), rebuild once.
-  if (state.players?.some(p => Array.isArray(p.trail))) {
+  if (state.players?.some((p) => Array.isArray(p.trail))) {
     rebuildTrailLayerFromState(state);
   }
 
-  if (state.state === 'round_end' && previousState !== 'round_end') {
+  if (state.state === "round_end" && previousState !== "round_end") {
     roundEndOverlayVisible = false;
     if (roundEndOverlayTimer) clearTimeout(roundEndOverlayTimer);
     roundEndOverlayTimer = setTimeout(() => {
       roundEndOverlayVisible = true;
       updateUI(currentGameState);
     }, ROUND_END_OVERLAY_DELAY_MS);
-  } else if (state.state !== 'round_end') {
+  } else if (state.state !== "round_end") {
     roundEndOverlayVisible = true;
     if (roundEndOverlayTimer) {
       clearTimeout(roundEndOverlayTimer);
@@ -102,7 +107,7 @@ socket.on('gameState', (state) => {
   updateUI(state);
 });
 
-socket.on('frame', (frame) => {
+socket.on("frame", (frame) => {
   if (!currentGameState) {
     currentGameState = normalizeGameStateSnapshot(null, frame);
     updateUI(currentGameState);
@@ -114,7 +119,7 @@ socket.on('frame', (frame) => {
   currentGameState = {
     ...currentGameState,
     ...frame,
-    players: mergePlayers(currentGameState.players, frame.players)
+    players: mergePlayers(currentGameState.players, frame.players),
   };
 
   if (currentGameState.state !== previousState) {
@@ -123,7 +128,7 @@ socket.on('frame', (frame) => {
 
   // Apply incremental trail updates to the cached trail layer.
   if (Array.isArray(frame.trailUpdates) && frame.trailUpdates.length) {
-    const playersById = new Map(currentGameState.players.map(p => [p.id, p]));
+    const playersById = new Map(currentGameState.players.map((p) => [p.id, p]));
     for (const update of frame.trailUpdates) {
       const player = playersById.get(update.playerId);
       if (!player) continue;
@@ -132,112 +137,115 @@ socket.on('frame', (frame) => {
   }
 
   // Throttle DOM-heavy HUD updates.
-  if (currentGameState.state === 'playing' || currentGameState.state === 'round_end') {
+  if (
+    currentGameState.state === "playing" ||
+    currentGameState.state === "round_end"
+  ) {
     const now = performance.now();
-    if ((now - lastHudUpdateMs) >= HUD_UPDATE_INTERVAL_MS) {
+    if (now - lastHudUpdateMs >= HUD_UPDATE_INTERVAL_MS) {
       lastHudUpdateMs = now;
       updateHUD(currentGameState);
     }
   }
 });
 
-socket.on('error', (message) => {
+socket.on("error", (message) => {
   alert(message);
 });
 
 // Join game
-joinButton.addEventListener('click', () => {
+joinButton.addEventListener("click", () => {
   const playerName = playerNameInput.value.trim();
   if (!playerName) {
-    alert('Please enter your name');
+    alert("Please enter your name");
     return;
   }
 
-  socket.emit('joinGame', playerName);
-  joinForm.style.display = 'none';
-  lobbyPanel.style.display = 'block';
+  socket.emit("joinGame", playerName);
+  joinForm.style.display = "none";
+  lobbyPanel.style.display = "block";
 });
 
 // Player ready
-readyButton.addEventListener('click', () => {
-  socket.emit('playerReady');
+readyButton.addEventListener("click", () => {
+  socket.emit("playerReady");
   readyButton.disabled = true;
-  readyButton.textContent = 'Waiting for others...';
+  readyButton.textContent = "Waiting for others...";
 });
 
 // Keyboard input
-window.addEventListener('keydown', (e) => {
-  if (!currentGameState || currentGameState.state !== 'playing') return;
+window.addEventListener("keydown", (e) => {
+  if (!currentGameState || currentGameState.state !== "playing") return;
 
   pressedKeys.add(e.key);
   sendInput();
 });
 
-window.addEventListener('keyup', (e) => {
+window.addEventListener("keyup", (e) => {
   pressedKeys.delete(e.key);
   sendInput();
 });
 
 function sendInput() {
-  const player = currentGameState?.players.find(p => p.id === myPlayerId);
+  const player = currentGameState?.players.find((p) => p.id === myPlayerId);
   if (!player) return;
 
   let turning = 0;
 
-  if (pressedKeys.has('ArrowLeft')) {
+  if (pressedKeys.has("ArrowLeft")) {
     turning = -1;
-  } else if (pressedKeys.has('ArrowRight')) {
+  } else if (pressedKeys.has("ArrowRight")) {
     turning = 1;
   }
 
-  socket.emit('playerInput', { turning });
+  socket.emit("playerInput", { turning });
 }
 
 // Update UI based on game state
 function updateUI(state) {
   switch (state.state) {
-    case 'lobby':
-      lobby.style.display = 'flex';
-      gameScreen.style.display = 'none';
+    case "lobby":
+      lobby.style.display = "flex";
+      gameScreen.style.display = "none";
       updateLobby(state);
       break;
 
-    case 'countdown':
-      lobby.style.display = 'none';
-      gameScreen.style.display = 'flex';
-      countdown.style.display = 'flex';
-      roundEnd.style.display = 'none';
+    case "countdown":
+      lobby.style.display = "none";
+      gameScreen.style.display = "flex";
+      countdown.style.display = "flex";
+      roundEnd.style.display = "none";
       showCountdown(state.countdown);
       updateHUD(state);
       break;
 
-    case 'playing':
-      lobby.style.display = 'none';
-      gameScreen.style.display = 'flex';
-      countdown.style.display = 'none';
-      roundEnd.style.display = 'none';
+    case "playing":
+      lobby.style.display = "none";
+      gameScreen.style.display = "flex";
+      countdown.style.display = "none";
+      roundEnd.style.display = "none";
       updateHUD(state);
       break;
 
-    case 'round_end':
-      lobby.style.display = 'none';
-      gameScreen.style.display = 'flex';
-      countdown.style.display = 'none';
+    case "round_end":
+      lobby.style.display = "none";
+      gameScreen.style.display = "flex";
+      countdown.style.display = "none";
 
       if (roundEndOverlayVisible) {
-        roundEnd.style.display = 'flex';
+        roundEnd.style.display = "flex";
         showRoundEnd(state);
       } else {
-        roundEnd.style.display = 'none';
+        roundEnd.style.display = "none";
         updateHUD(state);
       }
       break;
 
-    case 'game_over':
-      lobby.style.display = 'none';
-      gameScreen.style.display = 'flex';
-      countdown.style.display = 'none';
-      roundEnd.style.display = 'flex';
+    case "game_over":
+      lobby.style.display = "none";
+      gameScreen.style.display = "flex";
+      countdown.style.display = "none";
+      roundEnd.style.display = "flex";
       showGameOver(state);
       break;
   }
@@ -248,23 +256,23 @@ function updateLobby(state) {
   playerCount.textContent = `${state.players.length}/10`;
   const readySet = new Set(state.readyPlayers || []);
 
-  playerList.innerHTML = '';
-  state.players.forEach(player => {
+  playerList.innerHTML = "";
+  state.players.forEach((player) => {
     const isReady = readySet.has(player.id);
     const isMe = player.id === myPlayerId;
 
-    const item = document.createElement('div');
-    item.className = 'player-item';
+    const item = document.createElement("div");
+    item.className = "player-item";
     item.innerHTML = `
       <div class="player-avatar" style="color: ${player.color}; border-color: ${player.color}">
         ${player.name.charAt(0).toUpperCase()}
       </div>
       <div class="player-info">
-        <div class="player-name">${player.name} ${isMe ? '(You)' : ''}</div>
-        <div class="player-controls">Controls: ${player.controls.name}</div>
+        <div class="player-name">${player.name} ${isMe ? "(You)" : ""}</div>
+        <div class="player-controls">Controls ← / →</div>
       </div>
-      <span class="player-status ${isReady ? 'ready' : 'waiting'}">
-        ${isReady ? 'Ready' : 'Waiting'}
+      <span class="player-status ${isReady ? "ready" : "waiting"}">
+        ${isReady ? "Ready" : "Waiting"}
       </span>
     `;
 
@@ -274,23 +282,23 @@ function updateLobby(state) {
 
 // Show countdown
 function showCountdown(count) {
-  const numberEl = document.querySelector('.countdown-number');
+  const numberEl = document.querySelector(".countdown-number");
   numberEl.textContent = count;
 
   // Trigger animation
-  numberEl.style.animation = 'none';
+  numberEl.style.animation = "none";
   setTimeout(() => {
-    numberEl.style.animation = '';
+    numberEl.style.animation = "";
   }, 10);
 }
 
 // Update HUD
 function updateHUD(state) {
   // Update player list
-  hudPlayerList.innerHTML = '';
-  state.players.forEach(player => {
-    const div = document.createElement('div');
-    div.className = `hud-player ${!player.alive ? 'dead' : ''}`;
+  hudPlayerList.innerHTML = "";
+  state.players.forEach((player) => {
+    const div = document.createElement("div");
+    div.className = `hud-player ${!player.alive ? "dead" : ""}`;
     div.innerHTML = `
       <span class="hud-player-dot" style="color: ${player.color}"></span>
       <span>${player.name}</span>
@@ -300,15 +308,17 @@ function updateHUD(state) {
   });
 
   // Update controls
-  hudControlsList.innerHTML = '';
-  state.players.forEach(player => {
+  hudControlsList.innerHTML = "";
+  state.players.forEach((player) => {
     if (player.id === myPlayerId) {
-      const div = document.createElement('div');
-      div.className = 'hud-control';
-      let powerupText = '';
+      const div = document.createElement("div");
+      div.className = "hud-control";
+      let powerupText = "";
       if (player.powerupEffect) {
-        const remaining = Math.ceil((player.powerupEffect.endFrame - state.frameCount) / 60);
-        powerupText = ` (${player.powerupEffect.type === 'speed_boost' ? 'Speed+' : 'Speed-'} ${remaining}s)`;
+        const remaining = Math.ceil(
+          (player.powerupEffect.endFrame - state.frameCount) / 60,
+        );
+        powerupText = ` (${player.powerupEffect.type === "speed_boost" ? "Speed+" : "Speed-"} ${remaining}s)`;
       }
       div.innerHTML = `
         <span style="color: ${player.color}">${player.name}${powerupText}</span>
@@ -321,27 +331,27 @@ function updateHUD(state) {
 
 // Show round end
 function showRoundEnd(state) {
-  const winner = state.players.find(p => p.alive);
-  const winnerText = document.getElementById('winnerText');
+  const winner = state.players.find((p) => p.alive);
+  const winnerText = document.getElementById("winnerText");
 
   if (winner) {
     winnerText.textContent = `${winner.name} Wins!`;
     winnerText.style.color = winner.color;
   } else {
-    winnerText.textContent = 'Draw!';
-    winnerText.style.background = 'linear-gradient(135deg, #E20074, #00D68F)';
-    winnerText.style.webkitBackgroundClip = 'text';
-    winnerText.style.webkitTextFillColor = 'transparent';
+    winnerText.textContent = "Draw!";
+    winnerText.style.background = "linear-gradient(135deg, #E20074, #00D68F)";
+    winnerText.style.webkitBackgroundClip = "text";
+    winnerText.style.webkitTextFillColor = "transparent";
   }
 
   // Update scoreboard
-  const scoreBoard = document.getElementById('scoreBoard');
-  scoreBoard.innerHTML = '';
+  const scoreBoard = document.getElementById("scoreBoard");
+  scoreBoard.innerHTML = "";
 
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
-  sortedPlayers.forEach(player => {
-    const div = document.createElement('div');
-    div.className = 'score-item';
+  sortedPlayers.forEach((player) => {
+    const div = document.createElement("div");
+    div.className = "score-item";
     div.style.borderLeftColor = player.color;
     div.innerHTML = `
       <span class="score-name">${player.name}</span>
@@ -353,7 +363,7 @@ function showRoundEnd(state) {
 
 // Show game over
 function showGameOver(state) {
-  const winnerText = document.getElementById('winnerText');
+  const winnerText = document.getElementById("winnerText");
 
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
   const winner = sortedPlayers[0];
@@ -362,12 +372,12 @@ function showGameOver(state) {
   winnerText.style.color = winner.color;
 
   // Update final scoreboard
-  const scoreBoard = document.getElementById('scoreBoard');
-  scoreBoard.innerHTML = '';
+  const scoreBoard = document.getElementById("scoreBoard");
+  scoreBoard.innerHTML = "";
 
-  sortedPlayers.forEach(player => {
-    const div = document.createElement('div');
-    div.className = 'score-item';
+  sortedPlayers.forEach((player) => {
+    const div = document.createElement("div");
+    div.className = "score-item";
     div.style.borderLeftColor = player.color;
     div.innerHTML = `
       <span class="score-name">${player.name}</span>
@@ -391,7 +401,7 @@ function createExplosion(x, y, color) {
       vy: Math.sin(angle) * speed,
       life: 60, // frames
       maxLife: 60,
-      color: color
+      color: color,
     });
   }
   explosions.push({ particles });
@@ -403,7 +413,7 @@ function renderGame(state) {
   ctx.drawImage(trailCanvas, 0, 0);
 
   // Draw player heads + names (cheap; trails are cached)
-  state.players.forEach(player => {
+  state.players.forEach((player) => {
     if (!player.alive) return;
 
     // Draw powerup aura if active
@@ -414,7 +424,8 @@ function renderGame(state) {
 
       ctx.save();
       ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = player.powerupEffect.type === 'speed_boost' ? '#00FF00' : '#FF0000';
+      ctx.strokeStyle =
+        player.powerupEffect.type === "speed_boost" ? "#00FF00" : "#FF0000";
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
@@ -427,15 +438,15 @@ function renderGame(state) {
     ctx.arc(player.x, player.y, TRAIL_WIDTH * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 14px Inter, sans-serif';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 14px Inter, sans-serif";
+    ctx.textAlign = "center";
     ctx.fillText(player.name, player.x, player.y - 15);
   });
 
   // Draw powerups
   if (state.powerups) {
-    state.powerups.forEach(powerup => {
+    state.powerups.forEach((powerup) => {
       ctx.save();
       ctx.fillStyle = powerup.type.color;
       ctx.beginPath();
@@ -443,14 +454,14 @@ function renderGame(state) {
       ctx.fill();
 
       // Inner circle for contrast
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle = "#FFFFFF";
       ctx.beginPath();
       ctx.arc(powerup.x, powerup.y, 14, 0, Math.PI * 2);
       ctx.fill();
 
       // Icon (simple shape)
       ctx.fillStyle = powerup.type.color;
-      if (powerup.type.id === 'speed_boost') {
+      if (powerup.type.id === "speed_boost") {
         // Arrow up
         ctx.beginPath();
         ctx.moveTo(powerup.x, powerup.y - 8);
@@ -458,7 +469,7 @@ function renderGame(state) {
         ctx.lineTo(powerup.x + 5, powerup.y + 3);
         ctx.closePath();
         ctx.fill();
-      } else if (powerup.type.id === 'speed_slow') {
+      } else if (powerup.type.id === "speed_slow") {
         // Arrow down
         ctx.beginPath();
         ctx.moveTo(powerup.x, powerup.y + 8);
@@ -481,7 +492,8 @@ function drawEffects(state) {
   const currentFrame = state.frameCount ?? 0;
 
   for (const effect of state.effects) {
-    const progressRaw = (currentFrame - effect.createdAtFrame) / effect.durationFrames;
+    const progressRaw =
+      (currentFrame - effect.createdAtFrame) / effect.durationFrames;
     const progress = Math.max(0, Math.min(1, progressRaw));
     const fade = 1 - progress;
 
@@ -490,7 +502,10 @@ function drawEffects(state) {
     const alpha = 0.75 * fade;
 
     // Outer ring(s)
-    const colors = Array.isArray(effect.colors) && effect.colors.length ? effect.colors : ['#FFFFFF'];
+    const colors =
+      Array.isArray(effect.colors) && effect.colors.length
+        ? effect.colors
+        : ["#FFFFFF"];
     for (let i = 0; i < colors.length; i++) {
       const color = colors[i];
       ctx.save();
@@ -509,7 +524,7 @@ function drawEffects(state) {
     }
 
     // Sparks (deterministic per effect.id)
-    const sparkCount = effect.kind === 'player' ? 14 : 10;
+    const sparkCount = effect.kind === "player" ? 14 : 10;
     for (let s = 0; s < sparkCount; s++) {
       const seed = (effect.id ?? 1) * 997 + s * 101;
       const angle = seeded01(seed) * Math.PI * 2;
@@ -526,7 +541,7 @@ function drawEffects(state) {
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
+      ctx.lineCap = "round";
       ctx.shadowBlur = 8 * fade;
       ctx.shadowColor = color;
       ctx.beginPath();
@@ -545,11 +560,11 @@ function seeded01(seed) {
 
 function buildBackgroundLayer() {
   // Background fill
-  backgroundCtx.fillStyle = '#1A1A1A';
+  backgroundCtx.fillStyle = "#1A1A1A";
   backgroundCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
   // Subtle grid
-  backgroundCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+  backgroundCtx.strokeStyle = "rgba(255, 255, 255, 0.03)";
   backgroundCtx.lineWidth = 1;
 
   for (let x = 0; x < CANVAS_WIDTH; x += 50) {
@@ -567,7 +582,7 @@ function buildBackgroundLayer() {
   }
 
   // Border
-  backgroundCtx.strokeStyle = '#E20074';
+  backgroundCtx.strokeStyle = "#E20074";
   backgroundCtx.lineWidth = 3;
   backgroundCtx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 }
@@ -606,8 +621,8 @@ function drawTrailSegment(color, p1, p2) {
   trailCtx.save();
   trailCtx.strokeStyle = color;
   trailCtx.lineWidth = TRAIL_WIDTH;
-  trailCtx.lineCap = 'round';
-  trailCtx.lineJoin = 'round';
+  trailCtx.lineCap = "round";
+  trailCtx.lineJoin = "round";
   trailCtx.shadowBlur = 10;
   trailCtx.shadowColor = color;
   trailCtx.beginPath();
@@ -618,22 +633,28 @@ function drawTrailSegment(color, p1, p2) {
 }
 
 function mergePlayers(previousPlayers = [], nextPlayers = []) {
-  const prevById = new Map(previousPlayers.map(p => [p.id, p]));
-  return nextPlayers.map(player => {
+  const prevById = new Map(previousPlayers.map((p) => [p.id, p]));
+  return nextPlayers.map((player) => {
     const previous = prevById.get(player.id) || {};
     return { ...previous, ...player };
   });
 }
 
 function normalizeGameStateSnapshot(previous, next) {
-  const readyPlayers = Array.isArray(next?.readyPlayers) ? next.readyPlayers : (previous?.readyPlayers || []);
+  const readyPlayers = Array.isArray(next?.readyPlayers)
+    ? next.readyPlayers
+    : previous?.readyPlayers || [];
   const players = mergePlayers(previous?.players, next?.players || []);
   return { ...(previous || {}), ...(next || {}), readyPlayers, players };
 }
 
 // Animation loop for smooth rendering
 function animate() {
-  if (currentGameState && (currentGameState.state === 'playing' || currentGameState.state === 'round_end')) {
+  if (
+    currentGameState &&
+    (currentGameState.state === "playing" ||
+      currentGameState.state === "round_end")
+  ) {
     renderGame(currentGameState);
   }
   requestAnimationFrame(animate);
@@ -643,8 +664,8 @@ function animate() {
 animate();
 
 // Handle window resize
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   // You can add responsive canvas resizing here if needed
 });
 
-console.log('🎮 Curve Fever client initialized');
+console.log("🎮 Curve Fever client initialized");
