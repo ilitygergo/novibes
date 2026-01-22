@@ -237,6 +237,9 @@ function initializePlayers() {
     player.trail = [];
     player.turning = 0;
     player.gapCounter = Math.floor(Math.random() * GAP_INTERVAL);
+    player.speed = PLAYER_SPEED;
+    player.powerupEffect = null;
+    player.justWrapped = false;
   });
 }
 
