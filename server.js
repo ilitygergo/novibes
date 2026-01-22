@@ -218,8 +218,15 @@ function updateGame() {
     const inGap = (player.gapCounter % GAP_INTERVAL) < GAP_LENGTH;
 
     if (!inGap) {
-      // Add to trail
-      player.trail.push({ x: player.x, y: player.y });
+      // Add to trail with gap marker
+      const lastPoint = player.trail[player.trail.length - 1];
+      const isAfterGap = lastPoint && (player.gapCounter % GAP_INTERVAL) === GAP_LENGTH;
+
+      player.trail.push({
+        x: player.x,
+        y: player.y,
+        afterGap: isAfterGap // Mark if this point is right after a gap
+      });
 
       // Check collision with all trails
       if (checkCollision(player)) {
@@ -248,6 +255,9 @@ function checkCollision(player) {
     for (let i = 0; i < otherPlayer.trail.length - skipPoints - 1; i++) {
       const p1 = otherPlayer.trail[i];
       const p2 = otherPlayer.trail[i + 1];
+
+      // Skip segments where p2 is right after a gap (don't connect across gaps)
+      if (p2.afterGap) continue;
 
       if (distanceToSegment(checkPoint, p1, p2) < TRAIL_WIDTH) {
         return true;

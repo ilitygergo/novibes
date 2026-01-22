@@ -278,14 +278,19 @@ function renderGame(state) {
     ctx.shadowBlur = 10;
     ctx.shadowColor = player.color;
 
-    ctx.beginPath();
-    ctx.moveTo(player.trail[0].x, player.trail[0].y);
+    // Draw trail segments, breaking at gaps
+    for (let i = 0; i < player.trail.length - 1; i++) {
+      const p1 = player.trail[i];
+      const p2 = player.trail[i + 1];
 
-    for (let i = 1; i < player.trail.length; i++) {
-      ctx.lineTo(player.trail[i].x, player.trail[i].y);
+      // Skip drawing if the next point is after a gap
+      if (p2.afterGap) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
     }
-
-    ctx.stroke();
 
     // Reset shadow
     ctx.shadowBlur = 0;
