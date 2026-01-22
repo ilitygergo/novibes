@@ -298,8 +298,13 @@ function updateHUD(state) {
     if (player.id === myPlayerId) {
       const div = document.createElement('div');
       div.className = 'hud-control';
+      let powerupText = '';
+      if (player.powerupEffect) {
+        const remaining = Math.ceil((player.powerupEffect.endFrame - state.frameCount) / 60);
+        powerupText = ` (${player.powerupEffect.type === 'speed_boost' ? 'Speed+' : 'Speed-'} ${remaining}s)`;
+      }
       div.innerHTML = `
-        <span style="color: ${player.color}">${player.name}</span>
+        <span style="color: ${player.color}">${player.name}${powerupText}</span>
         <span class="hud-control-keys">${player.controls.name}</span>
       `;
       hudControlsList.appendChild(div);
@@ -368,6 +373,22 @@ function renderGame(state) {
   state.players.forEach(player => {
     if (!player.alive) return;
 
+    // Draw powerup aura if active
+    if (player.powerupEffect) {
+      const remaining = player.powerupEffect.endFrame - state.frameCount;
+      const progress = remaining / (10 * 60); // 10 seconds at 60 FPS
+      const radius = TRAIL_WIDTH * 1.5 + progress * 10;
+
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = player.powerupEffect.type === 'speed_boost' ? '#00FF00' : '#FF0000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.fillStyle = player.color;
     ctx.beginPath();
     ctx.arc(player.x, player.y, TRAIL_WIDTH * 1.5, 0, Math.PI * 2);
@@ -378,6 +399,44 @@ function renderGame(state) {
     ctx.textAlign = 'center';
     ctx.fillText(player.name, player.x, player.y - 15);
   });
+
+  // Draw powerups
+  if (state.powerups) {
+    state.powerups.forEach(powerup => {
+      ctx.save();
+      ctx.fillStyle = powerup.type.color;
+      ctx.beginPath();
+      ctx.arc(powerup.x, powerup.y, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner circle for contrast
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(powerup.x, powerup.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Icon (simple shape)
+      ctx.fillStyle = powerup.type.color;
+      if (powerup.type.id === 'speed_boost') {
+        // Arrow up
+        ctx.beginPath();
+        ctx.moveTo(powerup.x, powerup.y - 5);
+        ctx.lineTo(powerup.x - 3, powerup.y + 2);
+        ctx.lineTo(powerup.x + 3, powerup.y + 2);
+        ctx.closePath();
+        ctx.fill();
+      } else if (powerup.type.id === 'speed_slow') {
+        // Arrow down
+        ctx.beginPath();
+        ctx.moveTo(powerup.x, powerup.y + 5);
+        ctx.lineTo(powerup.x - 3, powerup.y - 2);
+        ctx.lineTo(powerup.x + 3, powerup.y - 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
 
   // Draw collision VFX on top
   drawEffects(state);

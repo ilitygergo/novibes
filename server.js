@@ -24,6 +24,15 @@ const FRAME_INTERVAL = 1000 / FPS;
 const EFFECT_DURATION_FRAMES = 36;
 const HEAD_COLLISION_DISTANCE = TRAIL_WIDTH * 2.2;
 
+// Powerup constants
+const POWERUP_SPAWN_INTERVAL = 300; // frames between powerup spawns
+const POWERUP_DURATION = 10 * FPS; // 10 seconds at 60 FPS
+const POWERUP_RADIUS = 12;
+const POWERUP_TYPES = {
+  SPEED_BOOST: { id: 'speed_boost', name: 'Speed Boost', color: '#00FF00', effect: 'speed', multiplier: 1.5 },
+  SPEED_SLOW: { id: 'speed_slow', name: 'Speed Slow', color: '#FF0000', effect: 'speed', multiplier: 0.5 }
+};
+
 // Player colors (10 distinct vibrant colors)
 const PLAYER_COLORS = [
   '#E20074', // Telekom Magenta
@@ -59,7 +68,9 @@ let gameState = {
   players: [],
   readyPlayers: new Set(),
   frameCount: 0,
-  effects: []
+  effects: [],
+  powerups: [],
+  nextPowerupId: 1
 };
 
 let nextEffectId = 1;
@@ -102,7 +113,9 @@ io.on('connection', (socket) => {
       score: 0,
       trail: [],
       turning: 0, // -1 left, 0 straight, 1 right
-      gapCounter: Math.floor(Math.random() * GAP_INTERVAL)
+      gapCounter: Math.floor(Math.random() * GAP_INTERVAL),
+      speed: PLAYER_SPEED,
+      powerupEffect: null
     };
 
     gameState.players.push(player);
@@ -230,6 +243,7 @@ function startGame() {
   gameState.state = 'playing';
   gameState.frameCount = 0;
   gameState.effects = [];
+  gameState.powerups = [];
   gameState.readyPlayers.clear();
   initializePlayers();
   io.emit('gameState', serializeGameState({ includeTrails: false }));
@@ -262,6 +276,19 @@ function updateGame() {
     });
   }
 
+  // Spawn powerups
+  if (gameState.frameCount % POWERUP_SPAWN_INTERVAL === 0 && gameState.powerups.length < 3) {
+    spawnPowerup();
+  }
+
+  // Update powerup effects
+  gameState.players.forEach(player => {
+    if (player.powerupEffect && player.powerupEffect.endFrame <= gameState.frameCount) {
+      player.speed = PLAYER_SPEED;
+      player.powerupEffect = null;
+    }
+  });
+
   gameState.players.forEach(player => {
     if (!player.alive) return;
 
@@ -269,8 +296,8 @@ function updateGame() {
     player.angle += player.turning * TURN_SPEED;
 
     // Update position
-    player.x += Math.cos(player.angle) * PLAYER_SPEED;
-    player.y += Math.sin(player.angle) * PLAYER_SPEED;
+    player.x += Math.cos(player.angle) * player.speed;
+    player.y += Math.sin(player.angle) * player.speed;
 
     // Check wall collision
     if (player.x < 0 || player.x > CANVAS_WIDTH ||
@@ -284,6 +311,9 @@ function updateGame() {
       });
       return;
     }
+
+    // Check powerup collision
+    checkPowerupCollision(player);
 
     // Gap system
     player.gapCounter++;
@@ -458,7 +488,8 @@ function serializeGameState({ includeTrails }) {
     frameCount: gameState.frameCount,
     readyPlayers: Array.from(gameState.readyPlayers),
     effects: gameState.effects,
-    players: gameState.players.map(player => serializePlayer(player, { includeTrail: includeTrails }))
+    players: gameState.players.map(player => serializePlayer(player, { includeTrail: includeTrails })),
+    powerups: gameState.powerups
   };
 }
 
@@ -469,8 +500,61 @@ function serializeFrame({ trailUpdates }) {
     frameCount: gameState.frameCount,
     effects: gameState.effects,
     players: gameState.players.map(player => serializePlayer(player, { includeTrail: false })),
-    trailUpdates
+    trailUpdates,
+    powerups: gameState.powerups
   };
+}
+
+// Powerup functions
+function spawnPowerup() {
+  const types = Object.values(POWERUP_TYPES);
+  const randomType = types[Math.floor(Math.random() * types.length)];
+
+  const powerup = {
+    id: gameState.nextPowerupId++,
+    x: Math.random() * (CANVAS_WIDTH - 2 * POWERUP_RADIUS) + POWERUP_RADIUS,
+    y: Math.random() * (CANVAS_HEIGHT - 2 * POWERUP_RADIUS) + POWERUP_RADIUS,
+    type: randomType,
+    spawnedAt: gameState.frameCount
+  };
+
+  gameState.powerups.push(powerup);
+}
+
+function checkPowerupCollision(player) {
+  for (let i = gameState.powerups.length - 1; i >= 0; i--) {
+    const powerup = gameState.powerups[i];
+    const dx = player.x - powerup.x;
+    const dy = player.y - powerup.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < POWERUP_RADIUS + TRAIL_WIDTH) {
+      // Apply effect
+      applyPowerupEffect(player, powerup.type);
+
+      // Remove powerup
+      gameState.powerups.splice(i, 1);
+
+      // Add visual effect
+      addEffect({
+        x: powerup.x,
+        y: powerup.y,
+        kind: 'powerup',
+        colors: [powerup.type.color]
+      });
+      break;
+    }
+  }
+}
+
+function applyPowerupEffect(player, powerupType) {
+  if (powerupType.effect === 'speed') {
+    player.speed = PLAYER_SPEED * powerupType.multiplier;
+    player.powerupEffect = {
+      type: powerupType.id,
+      endFrame: gameState.frameCount + POWERUP_DURATION
+    };
+  }
 }
 
 function serializePlayer(player, { includeTrail }) {
@@ -484,7 +568,8 @@ function serializePlayer(player, { includeTrail }) {
     angle: player.angle,
     alive: player.alive,
     score: player.score,
-    trail: includeTrail ? player.trail : undefined
+    trail: includeTrail ? player.trail : undefined,
+    powerupEffect: player.powerupEffect
   };
 }
 
