@@ -37,6 +37,20 @@ let roundEndOverlayTimer = null;
 const HUD_UPDATE_INTERVAL_MS = 250;
 let lastHudUpdateMs = 0;
 
+// Audio (must start on a user gesture due to autoplay restrictions)
+const bgm = new Audio('/asssets/background_music.mp3');
+bgm.loop = true;
+bgm.volume = 0.22;
+let bgmEnabled = true;
+
+const deathSfxPool = Array.from({ length: 6 }, () => {
+  const audio = new Audio('/asssets/player_death.wav');
+  audio.preload = 'auto';
+  audio.volume = 0.45;
+  return audio;
+});
+let nextDeathSfxIndex = 0;
+
 // Cached render layers
 const backgroundCanvas = document.createElement('canvas');
 const backgroundCtx = backgroundCanvas.getContext('2d');
@@ -65,7 +79,15 @@ socket.on('connect', () => {
 
 socket.on('gameState', (state) => {
   const previousState = currentGameState?.state;
+  const previousPlayersById = new Map((currentGameState?.players || []).map(p => [p.id, p]));
   currentGameState = normalizeGameStateSnapshot(currentGameState, state);
+
+  playDeathSoundsIfNeeded({
+    previousState,
+    nextState: currentGameState.state,
+    previousPlayersById,
+    nextPlayers: currentGameState.players
+  });
 
   if (state.state !== previousState) {
     // Clear trails when transitioning into/out of gameplay unless we received a full trail snapshot.
@@ -111,11 +133,19 @@ socket.on('frame', (frame) => {
 
   // If state changes (rare for frame packets), update screen layout.
   const previousState = currentGameState.state;
+  const previousPlayersById = new Map((currentGameState.players || []).map(p => [p.id, p]));
   currentGameState = {
     ...currentGameState,
     ...frame,
     players: mergePlayers(currentGameState.players, frame.players)
   };
+
+  playDeathSoundsIfNeeded({
+    previousState,
+    nextState: currentGameState.state,
+    previousPlayersById,
+    nextPlayers: currentGameState.players
+  });
 
   if (currentGameState.state !== previousState) {
     updateUI(currentGameState);
@@ -156,6 +186,7 @@ joinButton.addEventListener('click', () => {
   socket.emit('joinGame', playerName);
   joinForm.style.display = 'none';
   lobbyPanel.style.display = 'block';
+  tryStartBgm();
 });
 
 // Player ready
@@ -163,10 +194,21 @@ readyButton.addEventListener('click', () => {
   socket.emit('playerReady');
   readyButton.disabled = true;
   readyButton.textContent = 'Waiting for others...';
+  tryStartBgm();
 });
 
 // Keyboard input
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'm' || e.key === 'M') {
+    bgmEnabled = !bgmEnabled;
+    if (!bgmEnabled) {
+      bgm.pause();
+    } else {
+      tryStartBgm();
+    }
+    return;
+  }
+
   if (!currentGameState || currentGameState.state !== 'playing') return;
 
   pressedKeys.add(e.key);
@@ -449,6 +491,42 @@ function drawEffects(state) {
 function seeded01(seed) {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
+}
+
+function tryStartBgm() {
+  if (!bgmEnabled) return;
+  if (!bgm.paused) return;
+  bgm.play().catch(() => {
+    // Autoplay blocked until a valid user gesture; we'll retry on the next click/key.
+  });
+}
+
+function playDeathSfx() {
+  const audio = deathSfxPool[nextDeathSfxIndex++ % deathSfxPool.length];
+  try {
+    audio.currentTime = 0;
+    audio.play().catch(() => {
+      // Can be blocked until a user gesture; ignore.
+    });
+  } catch {
+    // Ignore playback errors.
+  }
+}
+
+function playDeathSoundsIfNeeded({ previousState, nextState, previousPlayersById, nextPlayers }) {
+  if (!previousPlayersById || previousPlayersById.size === 0) return;
+
+  const wasInGame = previousState === 'playing' || previousState === 'round_end';
+  const isInGame = nextState === 'playing' || nextState === 'round_end';
+  if (!wasInGame || !isInGame) return;
+
+  for (const player of nextPlayers || []) {
+    const prev = previousPlayersById.get(player.id);
+    if (!prev) continue;
+    if (prev.alive && !player.alive) {
+      playDeathSfx();
+    }
+  }
 }
 
 function buildBackgroundLayer() {

@@ -66,6 +66,8 @@ let nextEffectId = 1;
 
 // Serve static files
 app.use(express.static('public'));
+// Serve background music (intentionally matches requested /asssets/... path)
+app.use('/asssets', express.static(path.join(__dirname, 'assets', 'sounds')));
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
