@@ -75,7 +75,7 @@ io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
 
   // Send current game state to new player
-  socket.emit('gameState', gameState);
+  socket.emit('gameState', serializeGameState({ includeTrails: true }));
 
   // Handle player join
   socket.on('joinGame', (playerName) => {
@@ -101,7 +101,7 @@ io.on('connection', (socket) => {
     };
 
     gameState.players.push(player);
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
     console.log(`${playerName} joined (${gameState.players.length}/10)`);
   });
 
@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
       startCountdown();
     }
 
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
   });
 
   // Handle player input
@@ -141,7 +141,7 @@ io.on('connection', (socket) => {
         resetToLobby();
       }
 
-      io.emit('gameState', gameState);
+      io.emit('gameState', serializeGameState({ includeTrails: false }));
     }
   });
 });
@@ -153,7 +153,7 @@ function startCountdown() {
 
   const countdownInterval = setInterval(() => {
     gameState.countdown--;
-    io.emit('gameState', gameState);
+    io.emit('gameState', serializeGameState({ includeTrails: false }));
 
     if (gameState.countdown <= 0) {
       clearInterval(countdownInterval);
@@ -227,27 +227,28 @@ function startGame() {
   gameState.effects = [];
   gameState.readyPlayers.clear();
   initializePlayers();
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
 }
 
 // Game loop
 setInterval(() => {
   if (gameState.state === 'playing') {
-    updateGame();
-    io.emit('gameState', gameState);
+    const { trailUpdates } = updateGame();
+    io.emit('frame', serializeFrame({ trailUpdates }));
     return;
   }
 
   // Keep animating collision effects briefly after the round ends.
   if (gameState.state === 'round_end' && gameState.effects.length) {
     tickEffectsOnly();
-    io.emit('gameState', gameState);
+    io.emit('frame', serializeFrame({ trailUpdates: [] }));
   }
 }, FRAME_INTERVAL);
 
 // Update game state
 function updateGame() {
   gameState.frameCount++;
+  const trailUpdates = [];
 
   // Tick & prune effects
   if (gameState.effects.length) {
@@ -288,11 +289,14 @@ function updateGame() {
       const lastPoint = player.trail[player.trail.length - 1];
       const isAfterGap = lastPoint && (player.gapCounter % GAP_INTERVAL) === GAP_LENGTH;
 
-      player.trail.push({
+      const point = {
         x: player.x,
         y: player.y,
         afterGap: isAfterGap // Mark if this point is right after a gap
-      });
+      };
+
+      player.trail.push(point);
+      trailUpdates.push({ playerId: player.id, point });
 
       // Check collision with all trails
       const collision = checkCollision(player);
@@ -335,6 +339,8 @@ function updateGame() {
   if (alivePlayers.length <= 1) {
     endRound(alivePlayers[0] || null);
   }
+
+  return { trailUpdates };
 }
 
 function tickEffectsOnly() {
@@ -399,7 +405,7 @@ function endRound(winner) {
     winner.score++;
   }
 
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
 
   // Auto-start new round after 3 seconds
   setTimeout(() => {
@@ -421,7 +427,7 @@ function resetToLobby() {
     player.alive = false;
     player.trail = [];
   });
-  io.emit('gameState', gameState);
+  io.emit('gameState', serializeGameState({ includeTrails: false }));
 }
 
 function addEffect({ x, y, kind, colors }) {
@@ -438,6 +444,43 @@ function addEffect({ x, y, kind, colors }) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function serializeGameState({ includeTrails }) {
+  return {
+    state: gameState.state,
+    countdown: gameState.countdown,
+    frameCount: gameState.frameCount,
+    readyPlayers: Array.from(gameState.readyPlayers),
+    effects: gameState.effects,
+    players: gameState.players.map(player => serializePlayer(player, { includeTrail: includeTrails }))
+  };
+}
+
+function serializeFrame({ trailUpdates }) {
+  return {
+    state: gameState.state,
+    countdown: gameState.countdown,
+    frameCount: gameState.frameCount,
+    effects: gameState.effects,
+    players: gameState.players.map(player => serializePlayer(player, { includeTrail: false })),
+    trailUpdates
+  };
+}
+
+function serializePlayer(player, { includeTrail }) {
+  return {
+    id: player.id,
+    name: player.name,
+    color: player.color,
+    controls: player.controls,
+    x: player.x,
+    y: player.y,
+    angle: player.angle,
+    alive: player.alive,
+    score: player.score,
+    trail: includeTrail ? player.trail : undefined
+  };
 }
 
 // Start server

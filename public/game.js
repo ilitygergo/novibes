@@ -32,9 +32,28 @@ const ROUND_END_OVERLAY_DELAY_MS = 700;
 let roundEndOverlayVisible = true;
 let roundEndOverlayTimer = null;
 
+const HUD_UPDATE_INTERVAL_MS = 250;
+let lastHudUpdateMs = 0;
+
+// Cached render layers
+const backgroundCanvas = document.createElement('canvas');
+const backgroundCtx = backgroundCanvas.getContext('2d');
+const trailCanvas = document.createElement('canvas');
+const trailCtx = trailCanvas.getContext('2d');
+
+backgroundCanvas.width = CANVAS_WIDTH;
+backgroundCanvas.height = CANVAS_HEIGHT;
+trailCanvas.width = CANVAS_WIDTH;
+trailCanvas.height = CANVAS_HEIGHT;
+
+const lastTrailPointByPlayerId = new Map();
+
 // Setup canvas
 canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
+
+buildBackgroundLayer();
+resetTrailLayer();
 
 // Socket event handlers
 socket.on('connect', () => {
@@ -44,7 +63,24 @@ socket.on('connect', () => {
 
 socket.on('gameState', (state) => {
   const previousState = currentGameState?.state;
-  currentGameState = state;
+  currentGameState = normalizeGameStateSnapshot(currentGameState, state);
+
+  if (state.state !== previousState) {
+    // Clear trails when transitioning into/out of gameplay unless we received a full trail snapshot.
+    const hasTrailSnapshot = state.players?.some(p => Array.isArray(p.trail) && p.trail.length);
+    if (!hasTrailSnapshot && (state.state === 'playing' || previousState === 'playing')) {
+      resetTrailLayer();
+    }
+
+    if (state.state === 'lobby') {
+      resetTrailLayer();
+    }
+  }
+
+  // If the server sent a trail snapshot (e.g., joining mid-round), rebuild once.
+  if (state.players?.some(p => Array.isArray(p.trail))) {
+    rebuildTrailLayerFromState(state);
+  }
 
   if (state.state === 'round_end' && previousState !== 'round_end') {
     roundEndOverlayVisible = false;
@@ -62,9 +98,44 @@ socket.on('gameState', (state) => {
   }
 
   updateUI(state);
+});
 
-  if (state.state === 'playing' || state.state === 'round_end') {
-    renderGame(state);
+socket.on('frame', (frame) => {
+  if (!currentGameState) {
+    currentGameState = normalizeGameStateSnapshot(null, frame);
+    updateUI(currentGameState);
+    return;
+  }
+
+  // If state changes (rare for frame packets), update screen layout.
+  const previousState = currentGameState.state;
+  currentGameState = {
+    ...currentGameState,
+    ...frame,
+    players: mergePlayers(currentGameState.players, frame.players)
+  };
+
+  if (currentGameState.state !== previousState) {
+    updateUI(currentGameState);
+  }
+
+  // Apply incremental trail updates to the cached trail layer.
+  if (Array.isArray(frame.trailUpdates) && frame.trailUpdates.length) {
+    const playersById = new Map(currentGameState.players.map(p => [p.id, p]));
+    for (const update of frame.trailUpdates) {
+      const player = playersById.get(update.playerId);
+      if (!player) continue;
+      applyTrailPoint(player, update.point);
+    }
+  }
+
+  // Throttle DOM-heavy HUD updates.
+  if (currentGameState.state === 'playing' || currentGameState.state === 'round_end') {
+    const now = performance.now();
+    if ((now - lastHudUpdateMs) >= HUD_UPDATE_INTERVAL_MS) {
+      lastHudUpdateMs = now;
+      updateHUD(currentGameState);
+    }
   }
 });
 
@@ -166,10 +237,11 @@ function updateUI(state) {
 // Update lobby player list
 function updateLobby(state) {
   playerCount.textContent = `${state.players.length}/10`;
+  const readySet = new Set(state.readyPlayers || []);
 
   playerList.innerHTML = '';
   state.players.forEach(player => {
-    const isReady = state.readyPlayers.has(player.id);
+    const isReady = readySet.has(player.id);
     const isMe = player.id === myPlayerId;
 
     const item = document.createElement('div');
@@ -267,77 +339,22 @@ function showRoundEnd(state) {
 
 // Render game
 function renderGame(state) {
-  // Clear canvas
-  ctx.fillStyle = '#1A1A1A';
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  ctx.drawImage(backgroundCanvas, 0, 0);
+  ctx.drawImage(trailCanvas, 0, 0);
 
-  // Draw subtle grid
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-  ctx.lineWidth = 1;
-
-  for (let x = 0; x < CANVAS_WIDTH; x += 50) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, CANVAS_HEIGHT);
-    ctx.stroke();
-  }
-
-  for (let y = 0; y < CANVAS_HEIGHT; y += 50) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(CANVAS_WIDTH, y);
-    ctx.stroke();
-  }
-
-  // Draw border
-  ctx.strokeStyle = '#E20074';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-  // Draw all player trails and heads
+  // Draw player heads + names (cheap; trails are cached)
   state.players.forEach(player => {
-    if (player.trail.length === 0) return;
+    if (!player.alive) return;
 
-    // Draw trail with glow effect
-    ctx.strokeStyle = player.color;
-    ctx.lineWidth = TRAIL_WIDTH;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, TRAIL_WIDTH * 1.5, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Glow effect
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = player.color;
-
-    // Draw trail segments, breaking at gaps
-    for (let i = 0; i < player.trail.length - 1; i++) {
-      const p1 = player.trail[i];
-      const p2 = player.trail[i + 1];
-
-      // Skip drawing if the next point is after a gap
-      if (p2.afterGap) continue;
-
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    // Reset shadow
-    ctx.shadowBlur = 0;
-
-    // Draw player head (current position)
-    if (player.alive) {
-      ctx.fillStyle = player.color;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, TRAIL_WIDTH * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw player name above head
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 14px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(player.name, player.x, player.y - 15);
-    }
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 14px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(player.name, player.x, player.y - 15);
   });
 
   // Draw collision VFX on top
@@ -410,6 +427,94 @@ function drawEffects(state) {
 function seeded01(seed) {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
+}
+
+function buildBackgroundLayer() {
+  // Background fill
+  backgroundCtx.fillStyle = '#1A1A1A';
+  backgroundCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  // Subtle grid
+  backgroundCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+  backgroundCtx.lineWidth = 1;
+
+  for (let x = 0; x < CANVAS_WIDTH; x += 50) {
+    backgroundCtx.beginPath();
+    backgroundCtx.moveTo(x, 0);
+    backgroundCtx.lineTo(x, CANVAS_HEIGHT);
+    backgroundCtx.stroke();
+  }
+
+  for (let y = 0; y < CANVAS_HEIGHT; y += 50) {
+    backgroundCtx.beginPath();
+    backgroundCtx.moveTo(0, y);
+    backgroundCtx.lineTo(CANVAS_WIDTH, y);
+    backgroundCtx.stroke();
+  }
+
+  // Border
+  backgroundCtx.strokeStyle = '#E20074';
+  backgroundCtx.lineWidth = 3;
+  backgroundCtx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+}
+
+function resetTrailLayer() {
+  trailCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  lastTrailPointByPlayerId.clear();
+}
+
+function rebuildTrailLayerFromState(state) {
+  resetTrailLayer();
+
+  if (!state.players) return;
+  for (const player of state.players) {
+    if (!Array.isArray(player.trail) || player.trail.length < 2) continue;
+    let prev = null;
+    for (const point of player.trail) {
+      if (prev && !point.afterGap) {
+        drawTrailSegment(player.color, prev, point);
+      }
+      prev = point;
+    }
+    if (prev) lastTrailPointByPlayerId.set(player.id, prev);
+  }
+}
+
+function applyTrailPoint(player, point) {
+  const prev = lastTrailPointByPlayerId.get(player.id);
+  if (prev && point && !point.afterGap) {
+    drawTrailSegment(player.color, prev, point);
+  }
+  if (point) lastTrailPointByPlayerId.set(player.id, point);
+}
+
+function drawTrailSegment(color, p1, p2) {
+  trailCtx.save();
+  trailCtx.strokeStyle = color;
+  trailCtx.lineWidth = TRAIL_WIDTH;
+  trailCtx.lineCap = 'round';
+  trailCtx.lineJoin = 'round';
+  trailCtx.shadowBlur = 10;
+  trailCtx.shadowColor = color;
+  trailCtx.beginPath();
+  trailCtx.moveTo(p1.x, p1.y);
+  trailCtx.lineTo(p2.x, p2.y);
+  trailCtx.stroke();
+  trailCtx.restore();
+}
+
+function mergePlayers(previousPlayers = [], nextPlayers = []) {
+  const prevById = new Map(previousPlayers.map(p => [p.id, p]));
+  return nextPlayers.map(player => {
+    const previous = prevById.get(player.id) || {};
+    return { ...previous, ...player };
+  });
+}
+
+function normalizeGameStateSnapshot(previous, next) {
+  const readyPlayers = Array.isArray(next?.readyPlayers) ? next.readyPlayers : (previous?.readyPlayers || []);
+  const players = mergePlayers(previous?.players, next?.players || []);
+  return { ...(previous || {}), ...(next || {}), readyPlayers, players };
 }
 
 // Animation loop for smooth rendering
