@@ -429,7 +429,7 @@ function renderGame(state) {
 
     ctx.fillStyle = '#FFFF00';
     ctx.beginPath();
-    ctx.arc(player.x, player.y, TRAIL_WIDTH * 0.75, 0, Math.PI * 2);
+    ctx.arc(player.x, player.y, TRAIL_WIDTH * 0.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#FFFFFF';
