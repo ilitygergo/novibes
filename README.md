@@ -92,7 +92,7 @@ Your assigned controls are displayed in the lobby and in the game HUD.
 6. **Collision**: Hitting any trail eliminates you
 7. **Winning**: Be the last player alive to win the round
 8. **Scoring**: Winner gets 1 point per round
-9. **Match End**: First player to reach 10 points wins the match
+9. **Match End**: First player to reach 5 points wins the match
 
 ## Server Configuration
 
@@ -108,6 +108,7 @@ const TRAIL_WIDTH = 4;                // Trail thickness
 const GAP_INTERVAL = 100;             // Frames between gaps
 const GAP_LENGTH = 15;                // Frames of gap duration
 const FPS = 60;                       // Server tick rate
+const MAX_SCORE = 5;                   // Points needed to win match
 ```
 
 ## Project Structure

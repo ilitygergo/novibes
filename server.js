@@ -23,7 +23,7 @@ const FRAME_INTERVAL = 1000 / FPS;
 
 const EFFECT_DURATION_FRAMES = 36;
 const HEAD_COLLISION_DISTANCE = TRAIL_WIDTH * 2.2;
-const MAX_SCORE = 10;
+const MAX_SCORE = 5;
 
 // Powerup constants
 const POWERUP_SPAWN_INTERVAL = 300; // frames between powerup spawns
