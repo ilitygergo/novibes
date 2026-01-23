@@ -20,6 +20,10 @@ const roundEnd = document.getElementById("roundEnd");
 const hudPlayerList = document.getElementById("hudPlayerList");
 const hudControlsList = document.getElementById("hudControlsList");
 
+// Audio Elements
+const backgroundMusic = document.getElementById("backgroundMusic");
+const deathSound = document.getElementById("deathSound");
+
 // Socket connection - change this URL to your deployed server
 const SERVER_URL = "https://gregdoes.dev";
 const socket = io(SERVER_URL);
@@ -29,6 +33,7 @@ let myPlayerId = null;
 let currentGameState = null;
 let pressedKeys = new Set();
 let explosions = [];
+let previousAliveStatuses = new Map(); // Track previous alive status for death sound
 
 const ROUND_END_OVERLAY_DELAY_MS = 700;
 let roundEndOverlayVisible = true;
@@ -66,6 +71,18 @@ socket.on("connect", () => {
 socket.on("gameState", (state) => {
   const previousState = currentGameState?.state;
   currentGameState = normalizeGameStateSnapshot(currentGameState, state);
+
+  // Start background music when game starts
+  if (state.state === "playing" && previousState !== "playing") {
+    backgroundMusic.play().catch(e => console.log("Audio play failed:", e));
+  } else if (state.state !== "playing" && previousState === "playing") {
+    backgroundMusic.pause();
+  }
+
+  // Update previous alive statuses
+  state.players.forEach(player => {
+    previousAliveStatuses.set(player.id, player.alive);
+  });
 
   if (state.state !== previousState) {
     // Clear trails when transitioning into/out of gameplay unless we received a full trail snapshot.
@@ -121,6 +138,16 @@ socket.on("frame", (frame) => {
     ...frame,
     players: mergePlayers(currentGameState.players, frame.players),
   };
+
+  // Check for player deaths and play sound
+  frame.players.forEach(player => {
+    const wasAlive = previousAliveStatuses.get(player.id);
+    if (wasAlive === true && player.alive === false) {
+      deathSound.currentTime = 0;
+      deathSound.play().catch(e => console.log("Death sound failed:", e));
+    }
+    previousAliveStatuses.set(player.id, player.alive);
+  });
 
   if (currentGameState.state !== previousState) {
     updateUI(currentGameState);
